@@ -133,43 +133,80 @@
     line-height: 1.8;
   }
 
-  /* Reading card text with highlighted words */
+  /* Reading card title - vibrant gradient */
+  .reading-title {
+    background: linear-gradient(135deg, hsl(var(--coral)) 0%, hsl(var(--purple)) 50%, hsl(var(--sky-blue)) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Reading content text - cheerful dark color */
+  .reading-content {
+    color: hsl(280 40% 25%);
+  }
+
+  .dark .reading-content {
+    color: hsl(45 30% 90%);
+  }
+
+  /* Reading card text with highlighted words - more vibrant */
   .reading-text-highlight {
-    color: hsl(var(--text-highlight));
-    font-weight: 700;
+    background: linear-gradient(135deg, hsl(var(--orange)) 0%, hsl(var(--coral)) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    font-weight: 800;
+    padding: 0 2px;
+  }
+
+  /* Keyword badges - colorful */
+  .keyword-badge {
+    background: linear-gradient(135deg, hsl(var(--golden)) 0%, hsl(var(--orange)) 100%);
+    color: hsl(0 0% 15%);
+    font-weight: 600;
+    box-shadow: 0 2px 8px hsl(var(--golden) / 0.3);
   }
 }
 
 @layer components {
-  /* Decorative border for reading cards */
+  /* Decorative border for reading cards - rainbow gradient */
   .reading-card-border {
     background: linear-gradient(
       135deg,
       hsl(var(--coral)) 0%,
-      hsl(var(--coral)) 100%
+      hsl(var(--orange)) 25%,
+      hsl(var(--golden)) 50%,
+      hsl(var(--leaf-green)) 75%,
+      hsl(var(--sky-blue)) 100%
     );
-    padding: 12px;
-    border-radius: 16px;
+    padding: 14px;
+    border-radius: 20px;
     box-shadow: 
       0 8px 32px -8px hsl(var(--coral) / 0.4),
-      inset 0 1px 0 hsl(0 0% 100% / 0.2);
+      0 4px 16px -4px hsl(var(--golden) / 0.3),
+      inset 0 1px 0 hsl(0 0% 100% / 0.3);
   }
 
   .reading-card-inner {
-    background: hsl(var(--card-inner-bg));
-    border-radius: 8px;
-    padding: 24px;
+    background: linear-gradient(180deg, hsl(45 60% 98%) 0%, hsl(45 40% 95%) 100%);
+    border-radius: 12px;
+    padding: 28px;
     min-height: 400px;
   }
 
-  /* Decorative Tamil letters around border */
+  .dark .reading-card-inner {
+    background: linear-gradient(180deg, hsl(0 0% 16%) 0%, hsl(0 0% 12%) 100%);
+  }
+
+  /* Decorative Tamil letters around border - more colorful */
   .decorative-letters {
     position: absolute;
     font-family: 'Noto Sans Tamil', sans-serif;
     font-size: 1.5rem;
     font-weight: 700;
-    color: hsl(0 0% 20% / 0.7);
-    text-shadow: 1px 1px 0 hsl(0 0% 100% / 0.5);
+    color: hsl(45 90% 35%);
+    text-shadow: 1px 1px 0 hsl(0 0% 100% / 0.8), 2px 2px 4px hsl(0 0% 0% / 0.1);
   }
 
   /* Gradient button */
