@@ -75,7 +75,8 @@ Format your response as JSON with this structure:
 
 IMPORTANT: Respond ONLY with valid JSON, no additional text.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    // Generate text content
+    const textResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
@@ -90,43 +91,80 @@ IMPORTANT: Respond ONLY with valid JSON, no additional text.`;
       }),
     });
 
-    if (!response.ok) {
-      if (response.status === 429) {
+    if (!textResponse.ok) {
+      if (textResponse.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
+      if (textResponse.status === 402) {
         return new Response(
           JSON.stringify({ error: "AI usage limit reached. Please check your account." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      throw new Error(`AI gateway error: ${response.status}`);
+      const errorText = await textResponse.text();
+      console.error("AI gateway error:", textResponse.status, errorText);
+      throw new Error(`AI gateway error: ${textResponse.status}`);
     }
 
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
+    const textData = await textResponse.json();
+    const textContent = textData.choices?.[0]?.message?.content;
 
-    if (!content) {
+    if (!textContent) {
       throw new Error("No content received from AI");
     }
 
     // Parse the JSON response from AI
     let parsedContent;
     try {
-      // Remove markdown code blocks if present
-      const cleanContent = content.replace(/```json\n?|\n?```/g, "").trim();
+      const cleanContent = textContent.replace(/```json\n?|\n?```/g, "").trim();
       parsedContent = JSON.parse(cleanContent);
     } catch (parseError) {
-      console.error("Failed to parse AI response:", content);
+      console.error("Failed to parse AI response:", textContent);
       throw new Error("Failed to parse AI response");
     }
 
-    return new Response(JSON.stringify(parsedContent), {
+    // Generate illustration image
+    let imageBase64 = null;
+    try {
+      const imagePrompt = `Create a colorful, child-friendly educational illustration about "${topic}". Style: simple, cute, cartoon-like, suitable for children's educational materials. No text in the image. Bright, cheerful colors.`;
+      
+      const imageResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${LOVABLE_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash-image",
+          messages: [
+            { role: "user", content: imagePrompt }
+          ],
+          modalities: ["image", "text"],
+        }),
+      });
+
+      if (imageResponse.ok) {
+        const imageData = await imageResponse.json();
+        const generatedImage = imageData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+        if (generatedImage) {
+          imageBase64 = generatedImage;
+          console.log("Image generated successfully");
+        }
+      } else {
+        console.error("Image generation failed:", imageResponse.status);
+      }
+    } catch (imageError) {
+      console.error("Error generating image:", imageError);
+      // Continue without image - it's optional
+    }
+
+    return new Response(JSON.stringify({
+      ...parsedContent,
+      image: imageBase64,
+    }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error) {

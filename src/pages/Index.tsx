@@ -12,6 +12,7 @@ interface GeneratedReading {
   title: string;
   content: string;
   keywords: string[];
+  image?: string | null;
 }
 
 interface GenerationMeta {
@@ -170,6 +171,7 @@ export default function Index() {
                     content={generatedReading.content}
                     keywords={generatedReading.keywords}
                     language={generationMeta?.language || "tamil"}
+                    image={generatedReading.image}
                     onSave={handleSave}
                     isSaving={isSaving}
                     showSaveButton={!!user}
