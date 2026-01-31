@@ -39,6 +39,7 @@ export default function ReadingCard({
   showSaveButton = true,
 }: ReadingCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const downloadRef = useRef<HTMLDivElement>(null);
   const letters = decorativeLetters[language] || decorativeLetters.tamil;
 
   const highlightKeywords = (text: string) => {
@@ -51,10 +52,10 @@ export default function ReadingCard({
   };
 
   const handleDownload = async () => {
-    if (!cardRef.current) return;
+    if (!downloadRef.current) return;
 
     try {
-      const dataUrl = await toPng(cardRef.current, {
+      const dataUrl = await toPng(downloadRef.current, {
         quality: 1,
         pixelRatio: 2,
         backgroundColor: "#ffffff",
@@ -69,80 +70,94 @@ export default function ReadingCard({
     }
   };
 
+  const CardContent = ({ showKeywords = true }: { showKeywords?: boolean }) => (
+    <div className="reading-card-border relative overflow-hidden">
+      {/* Decorative letters around border */}
+      <div className="absolute inset-0 pointer-events-none">
+        {/* Top */}
+        <div className="absolute top-1 left-0 right-0 flex justify-around px-8">
+          {letters.slice(0, 3).map((letter, i) => (
+            <span key={`top-${i}`} className="decorative-letters">{letter}</span>
+          ))}
+        </div>
+        {/* Bottom */}
+        <div className="absolute bottom-1 left-0 right-0 flex justify-around px-8">
+          {letters.slice(3, 6).map((letter, i) => (
+            <span key={`bottom-${i}`} className="decorative-letters">{letter}</span>
+          ))}
+        </div>
+        {/* Left */}
+        <div className="absolute left-1 top-0 bottom-0 flex flex-col justify-around py-8">
+          {letters.slice(6, 9).map((letter, i) => (
+            <span key={`left-${i}`} className="decorative-letters">{letter}</span>
+          ))}
+        </div>
+        {/* Right */}
+        <div className="absolute right-1 top-0 bottom-0 flex flex-col justify-around py-8">
+          {letters.slice(9, 12).map((letter, i) => (
+            <span key={`right-${i}`} className="decorative-letters">{letter}</span>
+          ))}
+        </div>
+      </div>
+
+      <div className="reading-card-inner relative z-10">
+        <h2 className="reading-title text-2xl font-bold mb-4 tamil-text text-center">
+          {title}
+        </h2>
+
+        {image && (
+          <div className="mb-4 flex justify-center">
+            <img 
+              src={image} 
+              alt={title}
+              className="max-w-full h-auto max-h-48 rounded-lg shadow-md object-contain"
+            />
+          </div>
+        )}
+
+        <div
+          className="reading-content text-lg leading-relaxed tamil-text space-y-4"
+          dangerouslySetInnerHTML={{ __html: highlightKeywords(content) }}
+        />
+
+        {showKeywords && keywords.length > 0 && (
+          <div className="mt-6 pt-4 border-t border-border">
+            <p className="text-sm text-muted-foreground mb-2">Keywords:</p>
+            <div className="flex flex-wrap gap-2">
+              {keywords.map((keyword, index) => (
+                <span
+                  key={index}
+                  className="keyword-badge px-3 py-1 rounded-full text-sm font-medium tamil-text"
+                >
+                  {keyword}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-4">
+      {/* Visible card with keywords */}
       <motion.div
         ref={cardRef}
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5 }}
-        className="reading-card-border relative overflow-hidden"
       >
-        {/* Decorative letters around border */}
-        <div className="absolute inset-0 pointer-events-none">
-          {/* Top */}
-          <div className="absolute top-1 left-0 right-0 flex justify-around px-8">
-            {letters.slice(0, 3).map((letter, i) => (
-              <span key={`top-${i}`} className="decorative-letters">{letter}</span>
-            ))}
-          </div>
-          {/* Bottom */}
-          <div className="absolute bottom-1 left-0 right-0 flex justify-around px-8">
-            {letters.slice(3, 6).map((letter, i) => (
-              <span key={`bottom-${i}`} className="decorative-letters">{letter}</span>
-            ))}
-          </div>
-          {/* Left */}
-          <div className="absolute left-1 top-0 bottom-0 flex flex-col justify-around py-8">
-            {letters.slice(6, 9).map((letter, i) => (
-              <span key={`left-${i}`} className="decorative-letters">{letter}</span>
-            ))}
-          </div>
-          {/* Right */}
-          <div className="absolute right-1 top-0 bottom-0 flex flex-col justify-around py-8">
-            {letters.slice(9, 12).map((letter, i) => (
-              <span key={`right-${i}`} className="decorative-letters">{letter}</span>
-            ))}
-          </div>
-        </div>
-
-        <div className="reading-card-inner relative z-10">
-          <h2 className="text-2xl font-bold mb-4 tamil-text text-center">
-            {title}
-          </h2>
-
-          {image && (
-            <div className="mb-4 flex justify-center">
-              <img 
-                src={image} 
-                alt={title}
-                className="max-w-full h-auto max-h-48 rounded-lg shadow-md object-contain"
-              />
-            </div>
-          )}
-
-          <div
-            className="text-lg leading-relaxed tamil-text space-y-4"
-            dangerouslySetInnerHTML={{ __html: highlightKeywords(content) }}
-          />
-
-          {keywords.length > 0 && (
-            <div className="mt-6 pt-4 border-t border-border">
-              <p className="text-sm text-muted-foreground mb-2">Keywords:</p>
-              <div className="flex flex-wrap gap-2">
-                {keywords.map((keyword, index) => (
-                  <span
-                    key={index}
-                    className="px-3 py-1 bg-secondary rounded-full text-sm font-medium tamil-text"
-                  >
-                    {keyword}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        <CardContent showKeywords={true} />
       </motion.div>
+
+      {/* Hidden card for download (without keywords) */}
+      <div 
+        ref={downloadRef} 
+        style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}
+      >
+        <CardContent showKeywords={false} />
+      </div>
 
       <div className="flex gap-3 justify-center">
         <Button onClick={handleDownload} variant="outline" className="gap-2">
