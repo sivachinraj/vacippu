@@ -9,6 +9,7 @@ interface ReadingCardProps {
   content: string;
   keywords: string[];
   language: string;
+  image?: string | null;
   onSave?: () => void;
   isSaving?: boolean;
   showSaveButton?: boolean;
@@ -32,6 +33,7 @@ export default function ReadingCard({
   content,
   keywords,
   language,
+  image,
   onSave,
   isSaving,
   showSaveButton = true,
@@ -105,9 +107,19 @@ export default function ReadingCard({
         </div>
 
         <div className="reading-card-inner relative z-10">
-          <h2 className="text-2xl font-bold mb-6 tamil-text text-center">
+          <h2 className="text-2xl font-bold mb-4 tamil-text text-center">
             {title}
           </h2>
+
+          {image && (
+            <div className="mb-4 flex justify-center">
+              <img 
+                src={image} 
+                alt={title}
+                className="max-w-full h-auto max-h-48 rounded-lg shadow-md object-contain"
+              />
+            </div>
+          )}
 
           <div
             className="text-lg leading-relaxed tamil-text space-y-4"
