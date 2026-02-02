@@ -19,6 +19,7 @@ interface GenerationMeta {
   topic: string;
   language: string;
   length: string;
+  contentType: string;
 }
 
 export default function Index() {
@@ -29,7 +30,7 @@ export default function Index() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const handleGenerate = async (topic: string, language: string, length: string) => {
+  const handleGenerate = async (topic: string, language: string, length: string, contentType: string) => {
     setIsGenerating(true);
     setGeneratedReading(null);
 
@@ -42,7 +43,7 @@ export default function Index() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ topic, language, length }),
+          body: JSON.stringify({ topic, language, length, contentType }),
         }
       );
 
@@ -53,7 +54,7 @@ export default function Index() {
 
       const data = await response.json();
       setGeneratedReading(data);
-      setGenerationMeta({ topic, language, length });
+      setGenerationMeta({ topic, language, length, contentType });
 
       toast({
         title: "Reading Generated!",

@@ -10,6 +10,7 @@ interface GenerateReadingRequest {
   topic: string;
   language: string;
   length: "short" | "medium" | "long";
+  contentType?: "reading" | "moral_story" | "fable";
 }
 
 const languageNames: Record<string, string> = {
@@ -25,10 +26,28 @@ const languageNames: Record<string, string> = {
   punjabi: "Punjabi (ਪੰਜਾਬੀ)",
 };
 
-const lengthInstructions: Record<string, string> = {
-  short: "Write 3-4 simple sentences (about 30-50 words). This is for early readers/beginners.",
-  medium: "Write 5-7 sentences (about 60-100 words). This is for intermediate readers.",
-  long: "Write 8-12 sentences (about 120-180 words). This is for advanced readers.",
+const lengthInstructions: Record<string, Record<string, string>> = {
+  reading: {
+    short: "Write 3-4 simple sentences (about 30-50 words). This is for early readers/beginners.",
+    medium: "Write 5-7 sentences (about 60-100 words). This is for intermediate readers.",
+    long: "Write 8-12 sentences (about 120-180 words). This is for advanced readers.",
+  },
+  moral_story: {
+    short: "Write a very short story of 4-5 sentences (about 50-70 words) with a clear moral at the end.",
+    medium: "Write a short story of 6-8 sentences (about 80-120 words) with a clear moral at the end.",
+    long: "Write a story of 10-15 sentences (about 150-220 words) with a clear moral at the end.",
+  },
+  fable: {
+    short: "Write a brief fable of 4-5 sentences (about 50-70 words) with animal characters and a moral.",
+    medium: "Write a fable of 6-8 sentences (about 80-120 words) with animal characters and a moral.",
+    long: "Write a fable of 10-15 sentences (about 150-220 words) with animal characters and a moral.",
+  },
+};
+
+const contentTypePrompts: Record<string, string> = {
+  reading: "educational reading passage",
+  moral_story: "short moral story with a clear lesson at the end",
+  fable: "traditional fable in the style of Aesop's fables with animal characters who talk and act like humans",
 };
 
 serve(async (req) => {
@@ -37,7 +56,7 @@ serve(async (req) => {
   }
 
   try {
-    const { topic, language, length }: GenerateReadingRequest = await req.json();
+    const { topic, language, length, contentType = "reading" }: GenerateReadingRequest = await req.json();
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -45,32 +64,36 @@ serve(async (req) => {
     }
 
     const languageDisplay = languageNames[language] || language;
-    const lengthInstruction = lengthInstructions[length] || lengthInstructions.medium;
+    const lengthInstruction = lengthInstructions[contentType]?.[length] || lengthInstructions.reading.medium;
+    const contentDescription = contentTypePrompts[contentType] || contentTypePrompts.reading;
 
-    const systemPrompt = `You are an educational content creator specializing in creating reading passages for language learners. 
-Your task is to create engaging, age-appropriate reading content that helps learners practice reading in ${languageDisplay}.
+    const systemPrompt = `You are an educational content creator specializing in creating ${contentDescription}s for language learners. 
+Your task is to create engaging, age-appropriate ${contentDescription} content that helps learners practice reading in ${languageDisplay}.
 
 Important guidelines:
 - Write ONLY in ${languageDisplay} (not in English unless English is selected)
 - Use simple, clear vocabulary appropriate for learners
-- Include descriptive content about the topic
+${contentType === "fable" ? "- Use animal characters who speak and act like humans to teach the moral\n- Include dialogue between characters" : ""}
+${contentType === "moral_story" ? "- Build a simple narrative arc with beginning, middle, and end\n- End with a clear moral lesson" : ""}
+${contentType === "reading" ? "- Include descriptive content about the topic" : ""}
 - Make the text educational and interesting
 - Use natural sentence structures for the language
 - For Indian languages, use proper script (Tamil script for Tamil, Devanagari for Hindi, etc.)`;
 
-    const userPrompt = `Create a reading passage about "${topic}" in ${languageDisplay}.
+    const userPrompt = `Create a ${contentDescription} about "${topic}" in ${languageDisplay}.
 
 ${lengthInstruction}
 
 Also provide:
-1. A suitable title for the reading (in ${languageDisplay})
+1. A suitable title for the ${contentType === "reading" ? "reading" : "story"} (in ${languageDisplay})
 2. 3-5 key vocabulary words from the passage that should be highlighted (in ${languageDisplay})
+${contentType !== "reading" ? `3. The moral of the story in one sentence (in ${languageDisplay})` : ""}
 
 Format your response as JSON with this structure:
 {
   "title": "Title in the selected language",
-  "content": "The reading passage text with natural paragraphs",
-  "keywords": ["word1", "word2", "word3"]
+  "content": "The ${contentType === "reading" ? "reading passage" : "story"} text with natural paragraphs${contentType !== "reading" ? ". End with the moral." : ""}",
+  "keywords": ["word1", "word2", "word3"]${contentType !== "reading" ? ',\n  "moral": "The moral lesson in one sentence"' : ""}
 }
 
 IMPORTANT: Respond ONLY with valid JSON, no additional text.`;
@@ -129,7 +152,12 @@ IMPORTANT: Respond ONLY with valid JSON, no additional text.`;
     // Generate illustration image
     let imageBase64 = null;
     try {
-      const imagePrompt = `Create a colorful, child-friendly educational illustration about "${topic}". Style: simple, cute, cartoon-like, suitable for children's educational materials. No text in the image. Bright, cheerful colors.`;
+      const imagePromptByType: Record<string, string> = {
+        reading: `Create a colorful, child-friendly educational illustration about "${topic}". Style: simple, cute, cartoon-like, suitable for children's educational materials. No text in the image. Bright, cheerful colors.`,
+        moral_story: `Create a colorful, child-friendly illustration for a moral story about "${topic}". Style: warm, inviting, storybook illustration with expressive characters. No text in the image. Bright, cheerful colors.`,
+        fable: `Create a colorful, child-friendly illustration for a fable about "${topic}" featuring cute animal characters. Style: classic storybook, anthropomorphic animals in a natural setting. No text in the image. Bright, cheerful colors.`,
+      };
+      const imagePrompt = imagePromptByType[contentType] || imagePromptByType.reading;
       
       const imageResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
