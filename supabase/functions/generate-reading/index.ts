@@ -28,16 +28,19 @@ const languageNames: Record<string, string> = {
 
 const lengthInstructions: Record<string, Record<string, string>> = {
   reading: {
+    veryshort: "Write 2-3 very simple sentences (about 15-25 words). This should take no more than 2 minutes to read. For absolute beginners.",
     short: "Write 3-4 simple sentences (about 30-50 words). This is for early readers/beginners.",
     medium: "Write 5-7 sentences (about 60-100 words). This is for intermediate readers.",
     long: "Write 8-12 sentences (about 120-180 words). This is for advanced readers.",
   },
   moral_story: {
+    veryshort: "Write a tiny story of 2-3 sentences (about 20-30 words) with a quick moral. Should take under 2 minutes to read.",
     short: "Write a very short story of 4-5 sentences (about 50-70 words) with a clear moral at the end.",
     medium: "Write a short story of 6-8 sentences (about 80-120 words) with a clear moral at the end.",
     long: "Write a story of 10-15 sentences (about 150-220 words) with a clear moral at the end.",
   },
   fable: {
+    veryshort: "Write a tiny fable of 2-3 sentences (about 20-30 words) with animal characters and a moral. Should take under 2 minutes to read.",
     short: "Write a brief fable of 4-5 sentences (about 50-70 words) with animal characters and a moral.",
     medium: "Write a fable of 6-8 sentences (about 80-120 words) with animal characters and a moral.",
     long: "Write a fable of 10-15 sentences (about 150-220 words) with animal characters and a moral.",
@@ -80,9 +83,13 @@ ${contentType === "reading" ? "- Include descriptive content about the topic" : 
 - Use natural sentence structures for the language
 - For Indian languages, use proper script (Tamil script for Tamil, Devanagari for Hindi, etc.)`;
 
+    const uniqueSeed = `[Unique seed: ${crypto.randomUUID()}]`;
+
     const userPrompt = `Create a ${contentDescription} about "${topic}" in ${languageDisplay}.
 
 ${lengthInstruction}
+
+IMPORTANT: Generate a completely unique and original piece every time. Do not repeat patterns, phrases, or structures from previous outputs. Be creative with vocabulary, sentence structure, and narrative approach. ${uniqueSeed}
 
 Also provide:
 1. A suitable title for the ${contentType === "reading" ? "reading" : "story"} (in ${languageDisplay})

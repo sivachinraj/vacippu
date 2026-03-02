@@ -31,6 +31,7 @@ const languages = [
 ];
 
 const lengths = [
+  { value: "veryshort", label: "Very Short (~2 min read)" },
   { value: "short", label: "Short (3-4 sentences)" },
   { value: "medium", label: "Medium (5-7 sentences)" },
   { value: "long", label: "Long (8-12 sentences)" },
