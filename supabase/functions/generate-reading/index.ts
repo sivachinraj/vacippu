@@ -28,20 +28,20 @@ const languageNames: Record<string, string> = {
 
 const lengthInstructions: Record<string, Record<string, string>> = {
   reading: {
-    veryshort: "Write exactly 1-2 very simple sentences (about 8-15 words total). Ultra brief, for absolute beginners.",
-    short: "Write 2-3 simple sentences (about 15-25 words). This should take no more than 2 minutes to read. For early readers/beginners.",
+    veryshort: "Write exactly 2 simple sentences (about 12-20 words total). Very brief, for beginners.",
+    short: "Write 2-4 simple sentences (about 20-35 words). Quick and easy to read.",
     medium: "Write 5-7 sentences (about 60-100 words). This is for intermediate readers.",
     long: "Write 8-12 sentences (about 120-180 words). This is for advanced readers.",
   },
   moral_story: {
-    veryshort: "Write a tiny story of exactly 1-2 sentences (about 10-15 words) with a quick moral. Ultra brief.",
-    short: "Write a very short story of 2-3 sentences (about 20-30 words) with a clear moral. Should take under 2 minutes to read.",
+    veryshort: "Write a tiny story of exactly 2 sentences (about 12-20 words) with a quick moral.",
+    short: "Write a very short story of 2-4 sentences (about 20-35 words) with a clear moral.",
     medium: "Write a short story of 6-8 sentences (about 80-120 words) with a clear moral at the end.",
     long: "Write a story of 10-15 sentences (about 150-220 words) with a clear moral at the end.",
   },
   fable: {
-    veryshort: "Write a tiny fable of exactly 1-2 sentences (about 10-15 words) with animal characters and a moral. Ultra brief.",
-    short: "Write a brief fable of 2-3 sentences (about 20-30 words) with animal characters and a moral. Should take under 2 minutes to read.",
+    veryshort: "Write a tiny fable of exactly 2 sentences (about 12-20 words) with animal characters and a moral.",
+    short: "Write a brief fable of 2-4 sentences (about 20-35 words) with animal characters and a moral.",
     medium: "Write a fable of 6-8 sentences (about 80-120 words) with animal characters and a moral.",
     long: "Write a fable of 10-15 sentences (about 150-220 words) with animal characters and a moral.",
   },
