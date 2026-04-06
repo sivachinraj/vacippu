@@ -14,6 +14,7 @@ interface ChatMessage {
     keywords: string[];
     language: string;
     contentType: string;
+    image?: string | null;
   } | null;
 }
 
