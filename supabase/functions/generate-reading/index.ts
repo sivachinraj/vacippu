@@ -180,7 +180,7 @@ IMPORTANT: Respond ONLY with valid JSON, no additional text.`;
       };
       const imagePrompt = imagePromptByType[contentType] || imagePromptByType.reading;
       
-      const imageResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const imageResponse = await fetchWithRetry("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${LOVABLE_API_KEY}`,
