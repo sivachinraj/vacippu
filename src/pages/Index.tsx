@@ -7,6 +7,7 @@ import Header from "@/components/Header";
 import GeneratorForm from "@/components/GeneratorForm";
 import ReadingCard from "@/components/ReadingCard";
 import { BookOpen, Sparkles, Download, Save } from "lucide-react";
+import ChatSidebar from "@/components/ChatSidebar";
 
 interface GeneratedReading {
   title: string;
