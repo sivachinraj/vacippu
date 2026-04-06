@@ -220,6 +220,27 @@ export default function Index() {
             </div>
           </div>
         </section>
+
+        {/* Chat Section */}
+        <section className="py-12 md:py-16 bg-muted/30">
+          <div className="container max-w-3xl">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.4 }}
+            >
+              <div className="text-center mb-6">
+                <h2 className="text-2xl md:text-3xl font-bold mb-2">
+                  Or <span className="text-primary">Chat</span> for a Custom Reading
+                </h2>
+                <p className="text-muted-foreground">
+                  Describe exactly what you want and the AI will craft it for you
+                </p>
+              </div>
+              <ChatSection onReadingGenerated={handleChatReading} />
+            </motion.div>
+          </div>
+        </section>
       </main>
 
       <footer className="py-6 border-t">
