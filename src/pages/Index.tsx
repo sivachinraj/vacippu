@@ -7,6 +7,7 @@ import Header from "@/components/Header";
 import GeneratorForm from "@/components/GeneratorForm";
 import ReadingCard from "@/components/ReadingCard";
 import { BookOpen, Sparkles, Download, Save } from "lucide-react";
+import ChatSidebar from "@/components/ChatSidebar";
 
 interface GeneratedReading {
   title: string;
@@ -110,9 +111,35 @@ export default function Index() {
     }
   };
 
+  const handleChatReading = (reading: {
+    title: string;
+    content: string;
+    keywords: string[];
+    language: string;
+    contentType: string;
+  }) => {
+    setGeneratedReading({
+      title: reading.title,
+      content: reading.content,
+      keywords: reading.keywords,
+      image: null,
+    });
+    setGenerationMeta({
+      topic: reading.title,
+      language: reading.language || "tamil",
+      length: "medium",
+      contentType: reading.contentType || "reading",
+    });
+    toast({
+      title: "Reading Generated!",
+      description: "Your custom reading is ready.",
+    });
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
+      <ChatSidebar onReadingGenerated={handleChatReading} />
 
       <main className="flex-1">
         {/* Hero Section */}
