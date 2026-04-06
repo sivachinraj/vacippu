@@ -7,7 +7,7 @@ import Header from "@/components/Header";
 import GeneratorForm from "@/components/GeneratorForm";
 import ReadingCard from "@/components/ReadingCard";
 import { BookOpen, Sparkles, Download, Save } from "lucide-react";
-import ChatSidebar from "@/components/ChatSidebar";
+import ChatSection from "@/components/ChatSection";
 
 interface GeneratedReading {
   title: string;
@@ -139,7 +139,6 @@ export default function Index() {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <ChatSidebar onReadingGenerated={handleChatReading} />
 
       <main className="flex-1">
         {/* Hero Section */}
@@ -219,6 +218,27 @@ export default function Index() {
                 )}
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Chat Section */}
+        <section className="py-12 md:py-16 bg-muted/30">
+          <div className="container max-w-3xl">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.4 }}
+            >
+              <div className="text-center mb-6">
+                <h2 className="text-2xl md:text-3xl font-bold mb-2">
+                  Or <span className="text-primary">Chat</span> for a Custom Reading
+                </h2>
+                <p className="text-muted-foreground">
+                  Describe exactly what you want and the AI will craft it for you
+                </p>
+              </div>
+              <ChatSection onReadingGenerated={handleChatReading} />
+            </motion.div>
           </div>
         </section>
       </main>
