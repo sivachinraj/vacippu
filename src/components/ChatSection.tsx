@@ -25,6 +25,7 @@ interface ChatSectionProps {
     keywords: string[];
     language: string;
     contentType: string;
+    image?: string | null;
   }) => void;
 }
 
