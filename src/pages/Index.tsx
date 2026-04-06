@@ -139,7 +139,6 @@ export default function Index() {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
-      <ChatSidebar onReadingGenerated={handleChatReading} />
 
       <main className="flex-1">
         {/* Hero Section */}
