@@ -120,7 +120,7 @@ Format your response as JSON with this structure:
 IMPORTANT: Respond ONLY with valid JSON, no additional text.`;
 
     // Generate text content
-    const textResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const textResponse = await fetchWithRetry("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${LOVABLE_API_KEY}`,
