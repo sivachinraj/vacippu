@@ -117,12 +117,13 @@ export default function Index() {
     keywords: string[];
     language: string;
     contentType: string;
+    image?: string | null;
   }) => {
     setGeneratedReading({
       title: reading.title,
       content: reading.content,
       keywords: reading.keywords,
-      image: null,
+      image: reading.image || null,
     });
     setGenerationMeta({
       topic: reading.title,

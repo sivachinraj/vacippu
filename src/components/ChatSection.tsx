@@ -14,6 +14,7 @@ interface ChatMessage {
     keywords: string[];
     language: string;
     contentType: string;
+    image?: string | null;
   } | null;
 }
 
@@ -24,6 +25,7 @@ interface ChatSectionProps {
     keywords: string[];
     language: string;
     contentType: string;
+    image?: string | null;
   }) => void;
 }
 
