@@ -9,7 +9,7 @@ const corsHeaders = {
 interface GenerateReadingRequest {
   topic: string;
   language: string;
-  length: "short" | "medium" | "long";
+  length: "veryshort" | "short" | "medium" | "long";
   contentType?: "reading" | "moral_story" | "fable";
 }
 
@@ -17,9 +17,9 @@ const languageNames: Record<string, string> = {
   tamil: "Tamil (தமிழ்)",
   hindi: "Hindi (हिंदी)",
   english: "English",
-  telugu: "Telugu (తెలుగు)",
+  telugu: "Telugu (తెலுగு)",
   kannada: "Kannada (ಕನ್ನಡ)",
-  malayalam: "Malayalam (മലയാളം)",
+  malayalam: "Malayalam (മலயாളം)",
   bengali: "Bengali (বাংলা)",
   marathi: "Marathi (मराठी)",
   gujarati: "Gujarati (ગુજરાતી)",
@@ -53,18 +53,129 @@ const contentTypePrompts: Record<string, string> = {
   fable: "traditional fable in the style of Aesop's fables with animal characters who talk and act like humans",
 };
 
-async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    const response = await fetch(url, options);
-    if (response.status === 429 && attempt < maxRetries - 1) {
-      const waitTime = Math.pow(2, attempt + 1) * 1000;
-      console.log(`Rate limited, retrying in ${waitTime}ms (attempt ${attempt + 1}/${maxRetries})`);
-      await new Promise((r) => setTimeout(r, waitTime));
-      continue;
-    }
-    return response;
+async function generateTextWithOllama(
+  systemPrompt: string,
+  userPrompt: string,
+  ollamaUrl: string
+): Promise<string> {
+  const response = await fetch(`${ollamaUrl}/api/chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "qwen2.5:7b",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      stream: false,
+      options: {
+        temperature: 0.8,
+        num_predict: 2048,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Ollama error ${response.status}: ${err}`);
   }
-  throw new Error("Max retries exceeded");
+
+  const data = await response.json();
+  return data.message?.content ?? "";
+}
+
+async function generateImageWithComfyUI(
+  imagePrompt: string,
+  comfyUrl: string
+): Promise<string | null> {
+  const workflow = {
+    "3": {
+      class_type: "KSampler",
+      inputs: {
+        cfg: 7,
+        denoise: 1,
+        latent_image: ["5", 0],
+        model: ["4", 0],
+        negative: ["7", 0],
+        positive: ["6", 0],
+        sampler_name: "euler",
+        scheduler: "normal",
+        seed: Math.floor(Math.random() * 1000000000),
+        steps: 20,
+      },
+    },
+    "4": {
+      class_type: "CheckpointLoaderSimple",
+      inputs: { ckpt_name: "v1-5-pruned-emaonly.ckpt" },
+    },
+    "5": {
+      class_type: "EmptyLatentImage",
+      inputs: { batch_size: 1, height: 512, width: 512 },
+    },
+    "6": {
+      class_type: "CLIPTextEncode",
+      inputs: {
+        clip: ["4", 1],
+        text: `${imagePrompt}, cute cartoon, children's illustration, colorful, bright, no text`,
+      },
+    },
+    "7": {
+      class_type: "CLIPTextEncode",
+      inputs: {
+        clip: ["4", 1],
+        text: "text, watermark, nsfw, ugly, blurry, bad anatomy, realistic photo",
+      },
+    },
+    "8": {
+      class_type: "VAEDecode",
+      inputs: { samples: ["3", 0], vae: ["4", 2] },
+    },
+    "9": {
+      class_type: "SaveImage",
+      inputs: { filename_prefix: "vacippu", images: ["8", 0] },
+    },
+  };
+
+  const queueRes = await fetch(`${comfyUrl}/prompt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt: workflow }),
+  });
+
+  if (!queueRes.ok) {
+    console.error("ComfyUI queue error:", await queueRes.text());
+    return null;
+  }
+
+  const { prompt_id } = await queueRes.json();
+
+  for (let i = 0; i < 60; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+
+    const historyRes = await fetch(`${comfyUrl}/history/${prompt_id}`);
+    if (!historyRes.ok) continue;
+
+    const history = await historyRes.json();
+    const job = history[prompt_id];
+    if (!job) continue;
+
+    const outputs = job.outputs?.["9"]?.images;
+    if (!outputs || outputs.length === 0) continue;
+
+    const imgRes = await fetch(
+      `${comfyUrl}/view?filename=${outputs[0].filename}&subfolder=${outputs[0].subfolder}&type=${outputs[0].type}`
+    );
+    if (!imgRes.ok) return null;
+
+    const arrayBuffer = await imgRes.arrayBuffer();
+    const bytes = new Uint8Array(arrayBuffer);
+    let binary = "";
+    for (const b of bytes) binary += String.fromCharCode(b);
+    return `data:image/png;base64,${btoa(binary)}`;
+  }
+
+  console.error("ComfyUI timed out");
+  return null;
 }
 
 serve(async (req) => {
@@ -73,149 +184,71 @@ serve(async (req) => {
   }
 
   try {
-    const { topic, language, length, contentType = "reading" }: GenerateReadingRequest = await req.json();
+    const {
+      topic,
+      language,
+      length = "medium",
+      contentType = "reading",
+    }: GenerateReadingRequest = await req.json();
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
+    const OLLAMA_URL = Deno.env.get("OLLAMA_URL") ?? "https://asking-reproduce-peripherals-frederick.trycloudflare.com";
+    const COMFY_URL = Deno.env.get("COMFY_URL") ?? "https://cycles-resist-murray-luther.trycloudflare.com";
 
     const languageDisplay = languageNames[language] || language;
-    const lengthInstruction = lengthInstructions[contentType]?.[length] || lengthInstructions.reading.medium;
-    const contentDescription = contentTypePrompts[contentType] || contentTypePrompts.reading;
+    const lengthInstruction =
+      lengthInstructions[contentType]?.[length] ?? lengthInstructions.reading.medium;
+    const contentDescription = contentTypePrompts[contentType] ?? contentTypePrompts.reading;
 
-    const systemPrompt = `You are an educational content creator specializing in creating ${contentDescription}s for language learners. 
-Your task is to create engaging, age-appropriate ${contentDescription} content that helps learners practice reading in ${languageDisplay}.
+    const systemPrompt = `You are an educational content creator for the app வாசிபு (Vacippu), specialising in ${contentDescription}s for language learners.
 
-Important guidelines:
-- Write ONLY in ${languageDisplay} (not in English unless English is selected)
-- Use simple, clear vocabulary appropriate for learners
-${contentType === "fable" ? "- Use animal characters who speak and act like humans to teach the moral\n- Include dialogue between characters" : ""}
-${contentType === "moral_story" ? "- Build a simple narrative arc with beginning, middle, and end\n- End with a clear moral lesson" : ""}
-${contentType === "reading" ? "- Include descriptive content about the topic" : ""}
-- Make the text educational and interesting
-- Use natural sentence structures for the language
-- For Indian languages, use proper script (Tamil script for Tamil, Devanagari for Hindi, etc.)`;
-
-    const uniqueSeed = `[Unique seed: ${crypto.randomUUID()}]`;
+Rules:
+- Write the title, content, keywords${contentType !== "reading" ? ", and moral" : ""} ENTIRELY in ${languageDisplay}.
+- ONLY the image_prompt field must be written in English.
+- Use simple, clear vocabulary suitable for learners.
+${contentType === "fable" ? "- Use animal characters who speak and act like humans.\n- Include brief dialogue." : ""}
+${contentType === "moral_story" ? "- Build a simple narrative arc. End with a clear moral lesson." : ""}
+- Use the correct script for the language (Tamil script for Tamil, Devanagari for Hindi, etc).
+- Respond ONLY with valid JSON — no markdown, no extra text.`;
 
     const userPrompt = `Create a ${contentDescription} about "${topic}" in ${languageDisplay}.
 
-${lengthInstruction}
-
-IMPORTANT: Generate a completely unique and original piece every time. Do not repeat patterns, phrases, or structures from previous outputs. Be creative with vocabulary, sentence structure, and narrative approach. ${uniqueSeed}
+Length requirement: ${lengthInstruction}
 
 Also provide:
-1. A suitable title for the ${contentType === "reading" ? "reading" : "story"} (in ${languageDisplay})
-2. 3-5 key vocabulary words from the passage that should be highlighted (in ${languageDisplay})
-${contentType !== "reading" ? `3. The moral of the story in one sentence (in ${languageDisplay})` : ""}
+1. A suitable title (in ${languageDisplay})
+2. 3-5 key vocabulary words from the passage (in ${languageDisplay})
+3. An image_prompt in English describing a cute cartoon children's illustration scene for this ${contentType}
+${contentType !== "reading" ? `4. The moral of the story in one sentence (in ${languageDisplay})` : ""}
 
-Format your response as JSON with this structure:
+Return ONLY this JSON (no markdown):
 {
-  "title": "Title in the selected language",
-  "content": "The ${contentType === "reading" ? "reading passage" : "story"} text with natural paragraphs${contentType !== "reading" ? ". End with the moral." : ""}",
-  "keywords": ["word1", "word2", "word3"]${contentType !== "reading" ? ',\n  "moral": "The moral lesson in one sentence"' : ""}
-}
+  "title": "...",
+  "content": "...",
+  "keywords": ["word1", "word2", "word3"]${contentType !== "reading" ? ',\n  "moral": "..."' : ""},
+  "image_prompt": "..."
+}`;
 
-IMPORTANT: Respond ONLY with valid JSON, no additional text.`;
+    const rawText = await generateTextWithOllama(systemPrompt, userPrompt, OLLAMA_URL);
 
-    // Generate text content
-    const textResponse = await fetchWithRetry("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-      }),
-    });
-
-    if (!textResponse.ok) {
-      if (textResponse.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (textResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "AI usage limit reached. Please check your account." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const errorText = await textResponse.text();
-      console.error("AI gateway error:", textResponse.status, errorText);
-      throw new Error(`AI gateway error: ${textResponse.status}`);
-    }
-
-    const textData = await textResponse.json();
-    const textContent = textData.choices?.[0]?.message?.content;
-
-    if (!textContent) {
-      throw new Error("No content received from AI");
-    }
-
-    // Parse the JSON response from AI
-    let parsedContent;
+    let parsedContent: Record<string, unknown>;
     try {
-      const cleanContent = textContent.replace(/```json\n?|\n?```/g, "").trim();
-      parsedContent = JSON.parse(cleanContent);
-    } catch (parseError) {
-      console.error("Failed to parse AI response:", textContent);
-      throw new Error("Failed to parse AI response");
+      const clean = rawText.replace(/```json\n?|\n?```/g, "").trim();
+      parsedContent = JSON.parse(clean);
+    } catch {
+      console.error("Failed to parse Ollama response:", rawText);
+      throw new Error("Failed to parse AI response as JSON");
     }
 
-    // Generate illustration image
-    let imageBase64 = null;
-    try {
-      const imagePromptByType: Record<string, string> = {
-        reading: `Create a colorful, child-friendly educational illustration about "${topic}". Style: simple, cute, cartoon-like, suitable for children's educational materials. No text in the image. Bright, cheerful colors.`,
-        moral_story: `Create a colorful, child-friendly illustration for a moral story about "${topic}". Style: warm, inviting, storybook illustration with expressive characters. No text in the image. Bright, cheerful colors.`,
-        fable: `Create a colorful, child-friendly illustration for a fable about "${topic}" featuring cute animal characters. Style: classic storybook, anthropomorphic animals in a natural setting. No text in the image. Bright, cheerful colors.`,
-      };
-      const imagePrompt = imagePromptByType[contentType] || imagePromptByType.reading;
-      
-      const imageResponse = await fetchWithRetry("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-image",
-          messages: [
-            { role: "user", content: imagePrompt }
-          ],
-          modalities: ["image", "text"],
-        }),
-      });
+    const imagePrompt =
+      (parsedContent.image_prompt as string) ??
+      `cute cartoon children's illustration about ${topic}`;
 
-      if (imageResponse.ok) {
-        const imageData = await imageResponse.json();
-        const generatedImage = imageData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-        if (generatedImage) {
-          imageBase64 = generatedImage;
-          console.log("Image generated successfully");
-        }
-      } else {
-        console.error("Image generation failed:", imageResponse.status);
-      }
-    } catch (imageError) {
-      console.error("Error generating image:", imageError);
-      // Continue without image - it's optional
-    }
+    const imageBase64 = await generateImageWithComfyUI(imagePrompt, COMFY_URL);
 
-    return new Response(JSON.stringify({
-      ...parsedContent,
-      image: imageBase64,
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ ...parsedContent, image: imageBase64 }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
   } catch (error) {
     console.error("Error in generate-reading function:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
