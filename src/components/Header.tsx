@@ -2,7 +2,8 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { BookOpen, LogIn, LogOut, Library } from "lucide-react";
+import { LogIn, LogOut, Library } from "lucide-react";
+import logo from "@/assets/logo.png";
 
 export default function Header() {
   const { user, signOut } = useAuth();
@@ -15,7 +16,7 @@ export default function Header() {
     >
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-          <BookOpen className="h-8 w-8 text-primary" />
+          <img src={logo} alt="Vacippu logo" className="h-10 w-10" />
           <span className="text-xl font-bold">வாசிப்பு</span>
         </Link>
 
