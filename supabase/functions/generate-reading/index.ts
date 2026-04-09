@@ -139,8 +139,8 @@ serve(async (req) => {
   try {
     const { topic, language, length = "medium", contentType = "reading" }: GenerateReadingRequest = await req.json();
 
-    const OLLAMA_URL = Deno.env.get("OLLAMA_URL") ?? "https://asking-reproduce-peripherals-frederick.trycloudflare.com";
-    const COMFY_URL = Deno.env.get("COMFY_URL") ?? "https://cycles-resist-murray-luther.trycloudflare.com";
+    const OLLAMA_URL = "https://asking-reproduce-peripherals-frederick.trycloudflare.com";
+    const COMFY_URL = "https://cycles-resist-murray-luther.trycloudflare.com";
 
     const languageDisplay = languageNames[language] || language;
     const lengthInstruction = lengthInstructions[contentType]?.[length] ?? lengthInstructions.reading.medium;
