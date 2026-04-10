@@ -37,7 +37,7 @@ export default function Index() {
 
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-reading`,
+        `/api/generate-reading`,
         {
           method: "POST",
           headers: {
