@@ -137,9 +137,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const imagePrompt = (englishContent.image_prompt as string) ?? `A ${imageStyle} about ${topic}, cute cartoon style, vibrant colors, no text`;
-    const image = await generateImage(imagePrompt);
+    
 
-    return res.status(200).json({ ...parsedContent, image });
+    return res.status(200).json({ ...parsedContent, image_prompt: imagePrompt });
   } catch (error) {
     console.error("Error:", error);
     return res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });

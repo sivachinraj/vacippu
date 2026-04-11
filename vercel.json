@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/generate-reading.ts": {
+      "maxDuration": 300
+    },
+    "api/generate-image.ts": {
+      "maxDuration": 300
+    }
+  }
+}
