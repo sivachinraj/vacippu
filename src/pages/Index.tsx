@@ -36,17 +36,12 @@ export default function Index() {
     setGeneratedReading(null);
 
     try {
-      const response = await fetch(
-        `/api/generate-reading`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ topic, language, length, contentType }),
-        }
-      );
+      // Step 1: Get story text (fast ~10-15s)
+      const response = await fetch(`/api/generate-reading`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic, language, length, contentType }),
+      });
 
       if (!response.ok) {
         const error = await response.json();
@@ -56,18 +51,34 @@ export default function Index() {
       const data = await response.json();
       setGeneratedReading(data);
       setGenerationMeta({ topic, language, length, contentType });
+      setIsGenerating(false);
 
       toast({
         title: "Reading Generated!",
         description: "Your reading passage is ready.",
       });
+
+      // Step 2: Get image in background (slow ~30-60s)
+      if (data.image_prompt) {
+        fetch(`/api/generate-image`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imagePrompt: data.image_prompt }),
+        })
+          .then((r) => r.json())
+          .then((imgData) => {
+            if (imgData.image) {
+              setGeneratedReading((prev) => prev ? { ...prev, image: imgData.image } : prev);
+            }
+          })
+          .catch(() => {}); // silently fail if image doesn't load
+      }
     } catch (error: any) {
       toast({
         title: "Generation Failed",
         description: error.message || "Something went wrong",
         variant: "destructive",
       });
-    } finally {
       setIsGenerating(false);
     }
   };
