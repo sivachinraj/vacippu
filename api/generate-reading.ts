@@ -118,6 +118,9 @@ CRITICAL RULES:
 - Give character a name natural in ${languageDisplay}
 - Simple vocabulary children understand
 - Be creative and engaging
+- NEVER use generic fox/bear/lazy animal tropes
+- Create a UNIQUE unexpected scenario each time
+- Vary the setting: market, beach, mountain, school, festival, kitchen
 
 Return ONLY valid JSON, no markdown:
 {
