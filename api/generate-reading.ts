@@ -45,7 +45,7 @@ async function callOpenRouter(prompt: string): Promise<string> {
       "X-Title": "Vacippu",
     },
     body: JSON.stringify({
-      model: "google/gemma-2-9b-it:free",
+      model: "meta-llama/llama-3.1-8b-instruct:free",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.9,
       max_tokens: 2048,

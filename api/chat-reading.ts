@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         "X-Title": "Vacippu",
       },
       body: JSON.stringify({
-        model: "google/gemma-2-9b-it:free",
+        model: "meta-llama/llama-3.1-8b-instruct:free",
         messages: [
           { role: "system", content: "You are a helpful Tamil children's reading assistant for the Vacippu app. Help children understand stories and explain words in simple Tamil. Be warm and age-appropriate for children aged 6-12." },
           ...messages.map((m: { role: string; content: string }) => ({ role: m.role, content: m.content })),
