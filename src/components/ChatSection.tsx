@@ -66,7 +66,7 @@ export default function ChatSection({ onReadingGenerated }: ChatSectionProps) {
         .map((m) => ({ role: m.role, content: m.content }));
 
       const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chat-reading`,
+        `/api/chat-reading`,
         {
           method: "POST",
           headers: {
