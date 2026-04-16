@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-const COMFY_URL = "https://cycles-resist-murray-luther.trycloudflare.com";
+const COMFY_URL = "https://fossil-joining-bulk-nurse.trycloudflare.com";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Access-Control-Allow-Origin", "*");
