@@ -118,6 +118,8 @@ CRITICAL RULES:
 - Give character a name natural in ${languageDisplay}
 - Simple vocabulary children understand
 - Be creative and engaging
+- Use standard everyday Tamil (வழக்கு தமிழ்) — NOT literary Tamil
+- Use common words: குரங்கு not வானரம், பூனை not மார்ஜாலம், நாய் not சுனகம்
 - NEVER use generic fox/bear/lazy animal tropes
 - Create a UNIQUE unexpected scenario each time
 - Vary the setting: market, beach, mountain, school, festival, kitchen
