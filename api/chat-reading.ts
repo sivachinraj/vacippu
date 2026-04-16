@@ -56,7 +56,7 @@ Return ONLY valid JSON, no markdown:
   "image_prompt": "A colorful children's book illustration showing the key scene, cute cartoon style, vibrant, warm, no text"
 }`;
 
-      const raw = await callGroq([{ role: "user", content: storyPrompt }], 2048);
+      const raw = await callGroq([{ role: "user", content: storyPrompt }], 4096);
       
       let reading: Record<string, unknown>;
       try {

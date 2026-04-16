@@ -46,7 +46,7 @@ async function callGroq(prompt: string): Promise<string> {
       model: "llama-3.3-70b-versatile",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.9,
-      max_tokens: 2048,
+      max_tokens: 4096,
     }),
   });
   if (!response.ok) throw new Error(`Groq error ${response.status}: ${await response.text()}`);
