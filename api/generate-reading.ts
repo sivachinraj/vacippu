@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY!;
+const GROQ_API_KEY = process.env.GROQ_API_KEY!;
 
 const languageNames: Record<string, string> = {
   tamil: "Tamil", hindi: "Hindi", english: "English", telugu: "Telugu",
@@ -35,23 +35,21 @@ const imageStyleByType: Record<string, string> = {
   fable: "classic fable illustration, anthropomorphic animals in lush natural setting, expressive faces",
 };
 
-async function callOpenRouter(prompt: string): Promise<string> {
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+async function callGroq(prompt: string): Promise<string> {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
-      "HTTP-Referer": "https://vacippu.vercel.app",
-      "X-Title": "Vacippu",
+      "Authorization": `Bearer ${GROQ_API_KEY}`,
     },
     body: JSON.stringify({
-      model: "gemini-2.0-flash",
+      model: "llama-3.3-70b-versatile",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.9,
       max_tokens: 2048,
     }),
   });
-  if (!response.ok) throw new Error(`OpenRouter error ${response.status}: ${await response.text()}`);
+  if (!response.ok) throw new Error(`Groq error ${response.status}: ${await response.text()}`);
   const data = await response.json();
   return data.choices?.[0]?.message?.content ?? "";
 }
@@ -95,9 +93,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 ${lengthInstruction}
 
 Requirements:
-- Give the main character a memorable Tamil or Indian name
+- Give the main character a memorable Tamil or Indian name (Meena, Arjun, Kavya, Ravi, Priya, Muthukumar, Selvi, Karthik)
 - Choose an unexpected, delightful angle
-- Include vivid sensory details
+- Include at least 2 vivid sensory details
 - NO clichés
 
 Return ONLY valid JSON, no markdown:
@@ -130,7 +128,7 @@ Return ONLY valid JSON, no markdown:
   "image_prompt": "A ${imageStyle} showing specific scene, cute cartoon children's book style, vibrant, warm, no text"
 }`;
 
-    const raw = await callOpenRouter(prompt);
+    const raw = await callGroq(prompt);
     let parsedContent: Record<string, unknown>;
     try {
       parsedContent = parseJSON(raw);
