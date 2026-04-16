@@ -1,7 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY!;
-const COMFY_URL = "https://cycles-resist-murray-luther.trycloudflare.com";
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY!;
 
 const languageNames: Record<string, string> = {
   tamil: "Tamil", hindi: "Hindi", english: "English", telugu: "Telugu",
@@ -36,21 +35,25 @@ const imageStyleByType: Record<string, string> = {
   fable: "classic fable illustration, anthropomorphic animals in lush natural setting, expressive faces",
 };
 
-async function callGemini(prompt: string): Promise<string> {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.9, maxOutputTokens: 2048 },
-      }),
-    }
-  );
-  if (!response.ok) throw new Error(`Gemini error ${response.status}: ${await response.text()}`);
+async function callOpenRouter(prompt: string): Promise<string> {
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${OPENROUTER_API_KEY}`,
+      "HTTP-Referer": "https://vacippu.vercel.app",
+      "X-Title": "Vacippu",
+    },
+    body: JSON.stringify({
+      model: "google/gemma-2-9b-it:free",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.9,
+      max_tokens: 2048,
+    }),
+  });
+  if (!response.ok) throw new Error(`OpenRouter error ${response.status}: ${await response.text()}`);
   const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  return data.choices?.[0]?.message?.content ?? "";
 }
 
 function parseJSON(raw: string): Record<string, unknown> {
@@ -92,63 +95,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 ${lengthInstruction}
 
 Requirements:
-- Give the main character a memorable Tamil or Indian name (Meena, Arjun, Kavya, Ravi, Priya, Muthukumar, Selvi, Karthik)
+- Give the main character a memorable Tamil or Indian name
 - Choose an unexpected, delightful angle
-- Include at least 2 vivid sensory details
+- Include vivid sensory details
 - NO clichés
-${contentType === "fable" ? "- Animals must have witty dialogue and distinct personalities\n- Moral emerges naturally" : ""}
-${contentType === "moral_story" ? "- Create genuine emotional tension\n- Moral must feel discovered not lectured" : ""}
-${contentType === "reading" ? "- Include one surprising fact\n- Use vivid comparisons children will love" : ""}
 
 Return ONLY valid JSON, no markdown:
 {
   "title": "catchy title",
-  "content": "the full ${contentType === "reading" ? "passage" : "story"}",
+  "content": "the full story",
   "keywords": ["word1", "word2", "word3", "word4", "word5"],
   ${contentType !== "reading" ? '"moral": "one sentence moral",' : ""}
-  "image_prompt": "A ${imageStyle} showing [specific characters by name doing specific action], [setting with vivid colour details], cute cartoon children's book style, vibrant, warm, no text"
+  "image_prompt": "A ${imageStyle} showing specific characters doing specific action, cute cartoon children's book style, vibrant, warm, no text"
 }`
-      : `You are an award-winning children's author and expert translator. Write a creative ${contentTypeLabel} about "${topic}" directly in ${languageDisplay}.
+      : `You are an expert children's author writing directly in ${languageDisplay}.
+
+Write a creative ${contentTypeLabel} about "${topic}" for children aged 6-12.
 
 ${lengthInstruction}
 
-Requirements:
+CRITICAL RULES:
 - Write ENTIRELY in ${languageDisplay} using ${scriptNote}
-- Give the main character a memorable name that sounds natural in ${languageDisplay}
 - Use ONLY pure ${languageDisplay} words — NO English, NO Sanskrit loanwords
-- Write as if originally composed in ${languageDisplay} by a native author
-- Simple everyday vocabulary children aged 6-12 understand
-- Choose an unexpected, delightful angle
-- Include at least 2 vivid sensory details
-- NO clichés
-${contentType === "fable" ? "- Animals must have witty dialogue\n- Moral emerges naturally" : ""}
-${contentType === "moral_story" ? "- Create genuine emotional tension\n- Moral must feel discovered not lectured" : ""}
-
-Also write:
-- image_prompt in ENGLISH describing the key scene
+- Give character a name natural in ${languageDisplay}
+- Simple vocabulary children understand
+- Be creative and engaging
 
 Return ONLY valid JSON, no markdown:
 {
   "title": "title in ${languageDisplay}",
   "content": "story in ${languageDisplay}",
-  "keywords": ["word1 in ${languageDisplay}", "word2", "word3", "word4", "word5"],
+  "keywords": ["word1", "word2", "word3", "word4", "word5"],
   ${contentType !== "reading" ? '"moral": "moral in ' + languageDisplay + '",' : ""}
-  "image_prompt": "A ${imageStyle} showing [specific characters doing specific action], [setting with vivid colour details], cute cartoon children's book style, vibrant, warm, no text"
+  "image_prompt": "A ${imageStyle} showing specific scene, cute cartoon children's book style, vibrant, warm, no text"
 }`;
 
-    const raw = await callGemini(prompt);
-
+    const raw = await callOpenRouter(prompt);
     let parsedContent: Record<string, unknown>;
     try {
       parsedContent = parseJSON(raw);
     } catch {
-      console.error("Failed to parse Gemini response:", raw);
-      throw new Error("Failed to generate story");
+      throw new Error("Failed to parse story");
     }
 
-    const imagePrompt = (parsedContent.image_prompt as string)
-      ?? `A ${imageStyle} about ${topic}, cute cartoon style, vibrant colors, no text`;
-
+    const imagePrompt = (parsedContent.image_prompt as string) ?? `A ${imageStyle} about ${topic}, cute cartoon style, vibrant colors, no text`;
     return res.status(200).json({ ...parsedContent, image_prompt: imagePrompt });
   } catch (error) {
     console.error("Error:", error);
