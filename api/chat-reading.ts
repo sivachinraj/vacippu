@@ -13,7 +13,7 @@ async function callGroq(messages: {role: string, content: string}[], max_tokens 
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_API_KEY}` },
-    body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages, temperature: 0.9, max_tokens }),
+    body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages, temperature: 0.7, max_tokens }),
   });
   if (!response.ok) throw new Error(`Groq error: ${await response.text()}`);
   const data = await response.json();
@@ -28,9 +28,15 @@ async function fetchImage(imagePrompt: string): Promise<string | null> {
     if (!res.ok) return null;
     const buffer = await res.arrayBuffer();
     return `data:image/jpeg;base64,${Buffer.from(buffer).toString("base64")}`;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
+}
+
+function detectLength(msg: string): string {
+  const m = msg.toLowerCase();
+  if (/very short|வெகு சிறு|super short|tiny|brief/.test(m)) return "Write EXACTLY 2-3 sentences. No more.";
+  if (/short|சிறு|சிறிய/.test(m)) return "Write EXACTLY 4-5 sentences. No more.";
+  if (/long|நீண்ட|detailed|elaborate/.test(m)) return "Write 10-12 sentences.";
+  return "Write 5-7 sentences.";
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -46,15 +52,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const isGenerationRequest = /create|generate|write|make|give me|story|fable|reading|passage|கதை|எழுது|உருவாக்கு/i.test(lastUserMsg);
 
     if (isGenerationRequest) {
+      const lengthInstruction = detectLength(lastUserMsg);
+
       const storyPrompt = `You are an expert children's author. The user has requested: "${lastUserMsg}"
 
 Generate a complete children's reading based on what they described.
 - Detect the language from their request (Tamil, English, Hindi, etc.)
 - Detect the content type (reading passage, moral story, or fable)
-- Write 5-7 sentences, entirely in the requested language with native script
+- LENGTH RULE (CRITICAL — follow exactly): ${lengthInstruction}
+- Write entirely in the requested language with native script
 - Use standard everyday language, NOT literary/archaic words
-- Be creative, meaningful, and age-appropriate for children 6-12
-- For image_prompt: describe EXACTLY the specific characters from THIS story doing their specific action — never use generic animals
+- Be creative and age-appropriate for children 6-12
+- image_prompt: describe EXACTLY the specific characters from THIS story — never generic animals
 
 Return ONLY valid JSON, no markdown:
 {
@@ -64,14 +73,15 @@ Return ONLY valid JSON, no markdown:
   "moral": "one sentence moral (omit if reading passage)",
   "language": "tamil/english/hindi/telugu etc",
   "contentType": "reading or moral_story or fable",
-  "image_prompt": "cartoon children's book illustration of [exact characters from story] doing [exact action from story], colorful, vibrant, no text"
+  "image_prompt": "cartoon children's book illustration of [exact characters] doing [exact action from story], colorful, vibrant, no text"
 }`;
 
-      // Run story generation first, then image in parallel
-      const raw = await callGroq([{ role: "user", content: storyPrompt }], 4096);
+      // Run story + image in true parallel
+      const storyPromise = callGroq([{ role: "user", content: storyPrompt }], 2048);
 
       let reading: Record<string, unknown>;
       try {
+        const raw = await storyPromise;
         reading = parseJSON(raw);
       } catch {
         const chatText = await callGroq([
@@ -81,7 +91,7 @@ Return ONLY valid JSON, no markdown:
         return res.status(200).json({ message: chatText });
       }
 
-      // Fetch image in parallel now that we have the prompt
+      // Now fetch image (story is done, start image immediately)
       const image = reading.image_prompt
         ? await fetchImage(reading.image_prompt as string)
         : null;
@@ -99,7 +109,6 @@ Return ONLY valid JSON, no markdown:
       });
     }
 
-    // Regular chat
     const chatText = await callGroq([
       { role: "system", content: "You are a helpful Tamil children's reading assistant for the Vacippu app. Help children understand stories and explain words. Be warm and age-appropriate for children aged 6-12." },
       ...messages.map((m: { role: string; content: string }) => ({ role: m.role, content: m.content })),
