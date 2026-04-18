@@ -9,7 +9,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const { imagePrompt } = req.body;
-    const response = await fetch("https://api.together.xyz/v1/images/generations", {
+
+    // Step 1: Generate image with Together AI
+    const genRes = await fetch("https://api.together.xyz/v1/images/generations", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.TOGETHER_API_KEY}`,
@@ -25,11 +27,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }),
     });
 
-    if (!response.ok) throw new Error(await response.text());
-    const data = await response.json();
-    const imageUrl = data.data?.[0]?.url;
-    if (!imageUrl) throw new Error("No image returned");
-    return res.status(200).json({ image: imageUrl });
+    if (!genRes.ok) throw new Error(await genRes.text());
+    const genData = await genRes.json();
+    const imageUrl = genData.data?.[0]?.url;
+    if (!imageUrl) throw new Error("No image URL returned");
+
+    // Step 2: Download and convert to base64 before URL expires
+    const imgRes = await fetch(imageUrl);
+    if (!imgRes.ok) throw new Error("Failed to download image");
+    const buffer = await imgRes.arrayBuffer();
+    const base64 = Buffer.from(buffer).toString("base64");
+
+    return res.status(200).json({ image: `data:image/jpeg;base64,${base64}` });
   } catch (error) {
     return res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
   }
