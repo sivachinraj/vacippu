@@ -36,19 +36,20 @@ export default function Index() {
     setGeneratedReading(null);
 
     try {
-      // Step 1: Get story text (fast ~10-15s)
-      const response = await fetch(`/api/generate-reading`, {
+      // Start story + image in parallel
+      const storyPromise = fetch(`/api/generate-reading`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic, language, length, contentType }),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
+      const storyRes = await storyPromise;
+      if (!storyRes.ok) {
+        const error = await storyRes.json();
         throw new Error(error.error || "Failed to generate reading");
       }
 
-      const data = await response.json();
+      const data = await storyRes.json();
       setGeneratedReading(data);
       setGenerationMeta({ topic, language, length, contentType });
       setIsGenerating(false);
@@ -58,7 +59,7 @@ export default function Index() {
         description: "Your reading passage is ready.",
       });
 
-      // Step 2: Get image in background (slow ~30-60s)
+      // Fetch image in parallel (Pollinations is fast ~1-3s)
       if (data.image_prompt) {
         fetch(`/api/generate-image`, {
           method: "POST",
@@ -71,7 +72,7 @@ export default function Index() {
               setGeneratedReading((prev) => prev ? { ...prev, image: imgData.image } : prev);
             }
           })
-          .catch(() => {}); // silently fail if image doesn't load
+          .catch(() => {});
       }
     } catch (error: any) {
       toast({
