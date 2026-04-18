@@ -130,7 +130,7 @@ Return ONLY valid JSON, no markdown:
   "content": "story in ${languageDisplay}",
   "keywords": ["word1", "word2", "word3", "word4", "word5"],
   ${contentType !== "reading" ? '"moral": "moral in ' + languageDisplay + '",' : ""}
-  "image_prompt": "A ${imageStyle} showing specific scene, cute cartoon children's book style, vibrant, warm, no text"
+  "image_prompt": "IMPORTANT: describe EXACTLY the specific animals or characters from this story doing the specific action in this story — do NOT use generic animals. Example: if story has a monkey and cat, show a monkey and cat. A ${imageStyle} showing, cute cartoon children's book style, vibrant, warm, no text"
 }`;
 
     const raw = await callGroq(prompt);
