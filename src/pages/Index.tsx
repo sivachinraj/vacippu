@@ -59,20 +59,14 @@ export default function Index() {
         description: "Your reading passage is ready.",
       });
 
-      // Fetch image in parallel (Pollinations is fast ~1-3s)
+      // Fetch image directly from browser (avoids Vercel IP rate limiting)
       if (data.image_prompt) {
-        fetch(`/api/generate-image`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imagePrompt: data.image_prompt }),
-        })
-          .then((r) => r.json())
-          .then((imgData) => {
-            if (imgData.image) {
-              setGeneratedReading((prev) => prev ? { ...prev, image: imgData.image } : prev);
-            }
-          })
-          .catch(() => {});
+        const encoded = encodeURIComponent(data.image_prompt + ", children's book illustration, vibrant colors, cute cartoon style, no text");
+        const seed = Math.floor(Math.random() * 999999);
+        const imgUrl = `https://image.pollinations.ai/prompt/${encoded}?width=512&height=512&nologo=true&seed=${seed}`;
+        const img = new Image();
+        img.onload = () => setGeneratedReading((prev) => prev ? { ...prev, image: imgUrl } : prev);
+        img.src = imgUrl;
       }
     } catch (error: any) {
       toast({
