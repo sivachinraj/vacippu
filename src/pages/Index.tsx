@@ -59,14 +59,26 @@ export default function Index() {
         description: "Your reading passage is ready.",
       });
 
-      // Fetch image directly from browser (avoids Vercel IP rate limiting)
+      // Fetch image directly from browser with retries
       if (data.image_prompt) {
-        const encoded = encodeURIComponent(data.image_prompt + ", children's book illustration, vibrant colors, cute cartoon style, no text");
-        const seed = Math.floor(Math.random() * 999999);
-        const imgUrl = `https://image.pollinations.ai/prompt/${encoded}?width=512&height=512&nologo=true&seed=${seed}`;
-        const img = new Image();
-        img.onload = () => setGeneratedReading((prev) => prev ? { ...prev, image: imgUrl } : prev);
-        img.src = imgUrl;
+        const loadImage = async (prompt: string, attempt = 0): Promise<void> => {
+          const encoded = encodeURIComponent(prompt + ", children's book illustration, vibrant colors, cute cartoon style, no text");
+          const seed = Math.floor(Math.random() * 999999);
+          const imgUrl = `https://image.pollinations.ai/prompt/${encoded}?width=512&height=512&nologo=true&seed=${seed}`;
+          try {
+            const res = await fetch(imgUrl);
+            if (!res.ok) throw new Error("failed");
+            const blob = await res.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            setGeneratedReading((prev) => prev ? { ...prev, image: objectUrl } : prev);
+          } catch {
+            if (attempt < 3) {
+              await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+              return loadImage(prompt, attempt + 1);
+            }
+          }
+        };
+        loadImage(data.image_prompt);
       }
     } catch (error: any) {
       toast({
