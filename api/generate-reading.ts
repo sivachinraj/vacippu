@@ -8,31 +8,16 @@ const languageNames: Record<string, string> = {
   marathi: "Marathi", gujarati: "Gujarati", punjabi: "Punjabi",
 };
 
-const lengthInstructions: Record<string, Record<string, string>> = {
-  reading: {
-    veryshort: "Write exactly 2 sentences. Must be complete and meaningful.",
-    short: "Write exactly 4 sentences. Each sentence must connect to the next.",
-    medium: "Write exactly 6 sentences forming a complete, meaningful passage.",
-    long: "Write exactly 10 sentences forming a detailed, rich passage.",
-  },
-  moral_story: {
-    veryshort: "Write exactly 3 sentences: setup, conflict, resolution with moral.",
-    short: "Write exactly 5 sentences: introduce character with problem, build tension, resolve it, state moral clearly.",
-    medium: "Write exactly 7 sentences: vivid introduction, clear problem, rising tension, turning point, resolution, moral revealed naturally.",
-    long: "Write exactly 12 sentences: rich character introduction, detailed problem, multiple attempts, climax, warm resolution, timeless moral.",
-  },
-  fable: {
-    veryshort: "Write exactly 3 sentences: two animal characters, conflict, moral twist.",
-    short: "Write exactly 5 sentences: introduce two contrasting animal characters, conflict between them, clever resolution, moral.",
-    medium: "Write exactly 7 sentences: vivid animal characters with personalities, dialogue, conflict, clever resolution, moral.",
-    long: "Write exactly 12 sentences: rich animal world, distinct personalities, dialogue, escalating conflict, surprising resolution, moral.",
-  },
-};
-
 const imageStyleByType: Record<string, string> = {
   reading: "colorful educational children's book illustration, bright cheerful scene",
   moral_story: "warm storybook illustration, expressive characters with emotions, soft golden lighting",
   fable: "classic fable illustration, anthropomorphic animals in lush natural setting, expressive faces",
+};
+
+const sentenceCounts: Record<string, Record<string, number>> = {
+  reading:     { veryshort: 2, short: 4, medium: 6, long: 10 },
+  moral_story: { veryshort: 3, short: 5, medium: 7, long: 12 },
+  fable:       { veryshort: 3, short: 5, medium: 7, long: 12 },
 };
 
 async function callGroq(messages: {role: string, content: string}[], max_tokens = 4096): Promise<string> {
@@ -42,7 +27,7 @@ async function callGroq(messages: {role: string, content: string}[], max_tokens 
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
       messages,
-      temperature: 0.7,
+      temperature: 0.75,
       max_tokens,
     }),
   });
@@ -68,12 +53,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const { topic, language = "tamil", length = "medium", contentType = "reading" } = req.body;
     const languageDisplay = languageNames[language] || language;
-    const lengthInstruction = lengthInstructions[contentType]?.[length] ?? lengthInstructions.reading.medium;
     const imageStyle = imageStyleByType[contentType] ?? imageStyleByType.reading;
-
-    const contentTypeLabel = contentType === "reading" ? "educational reading passage"
-      : contentType === "moral_story" ? "children's moral story"
-      : "children's fable with talking animal characters";
+    const numSentences = sentenceCounts[contentType]?.[length] ?? 6;
 
     const scriptNote = language === "tamil" ? "Tamil script (தமிழ்)"
       : language === "hindi" || language === "marathi" ? "Devanagari script"
@@ -85,77 +66,106 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       : language === "punjabi" ? "Gurmukhi script"
       : "correct native script";
 
-    const systemPrompt = language === "english"
-      ? `You are an award-winning children's author. You write stories that are:
-- COHERENT: every sentence connects logically to the next
-- PURPOSEFUL: every detail serves the story
-- EMOTIONALLY RESONANT: readers feel something
-- COMPLETE: clear beginning, middle, end
-- CREATIVE: unexpected angles, vivid details, memorable characters
+    // ── SYSTEM PROMPT ──────────────────────────────────────────────────────────
+    const systemPrompt = `You are one of the world's finest children's authors, with deep knowledge of ${languageDisplay} literature, culture, and storytelling traditions.
 
-You NEVER write random disconnected sentences. Every story has a clear narrative thread.`
-      : `You are a master children's author who writes directly and natively in ${languageDisplay}.
+YOUR WRITING PHILOSOPHY:
+Every story you write has SOUL. You understand that a great children's story is not a list of observations or random events — it is a journey of the heart. A child must FEEL something when they read your story: curiosity, warmth, surprise, or a quiet understanding of life.
 
-Your ${languageDisplay} writing is:
-- COHERENT: every sentence flows naturally from the previous one
-- PURPOSEFUL: every detail serves the central story
-- AUTHENTIC: sounds like it was born in ${languageDisplay}, not translated
-- COMPLETE: clear beginning, middle, satisfying end
-- CREATIVE: unexpected angles, vivid sensory details
+THE DIFFERENCE BETWEEN BAD AND GOOD WRITING:
 
-You NEVER write random disconnected sentences. Every story has ONE clear narrative thread from start to finish.
-You use everyday ${languageDisplay} vocabulary — simple, natural, beautiful.
-You write in ${scriptNote}.`;
+BAD (what you must NEVER do):
+"Kannan saw a banana tree. Its leaves were green. Bananas were hanging. A monkey ate a banana."
+This is dead writing. It describes objects like a camera. There is no character, no feeling, no reason to care. It is a list of facts, not a story.
 
-    const userPrompt = language === "english"
-      ? `Write a ${contentTypeLabel} about "${topic}" for children aged 6-12.
+GOOD (what you must ALWAYS do):
+"Kannan had been saving his only coin for three whole days, dreaming of buying a banana from the market. But when he finally reached the tree, he found a hungry little monkey staring at the last fruit with desperate eyes — and in that moment, Kannan understood what truly mattered."
+This has: a CHARACTER with a DESIRE, an OBSTACLE, an EMOTIONAL MOMENT, and a RESOLUTION that means something.
 
-NARRATIVE RULES (follow strictly):
-${lengthInstruction}
-- The story must have ONE clear narrative thread — every sentence must connect to the topic "${topic}"
-- Give the main character a Tamil or Indian name (Meena, Arjun, Kavya, Ravi, Priya, Muthukumar, Selvi, Karthik, Anbu, Valli)
-- Every sentence must logically follow from the previous one
-- NO random details that don't serve the story
-- NO sentence should feel out of place
-${contentType === "moral_story" ? `- The moral must emerge NATURALLY from what happens in the story
-- Do NOT state the moral as a separate lesson — weave it into the ending` : ""}
-${contentType === "fable" ? `- Animals must have distinct, consistent personalities throughout
-- Include at least one line of dialogue
-- The moral must come from the story events, not be tacked on` : ""}
-${contentType === "reading" ? `- Include one specific, interesting fact about "${topic}"
-- Use a vivid comparison or metaphor children will love` : ""}
+THE FOUR PILLARS OF EVERY STORY YOU WRITE:
 
-Return ONLY valid JSON, no markdown, no extra text:
+1. CHARACTER WITH DESIRE
+   - Your main character must WANT something specific
+   - The reader must understand WHY they want it
+   - The desire must connect directly to the topic
+
+2. OBSTACLE OR TENSION
+   - Something must stand between the character and what they want
+   - This creates forward momentum — the reader wants to know what happens
+   - Even a very short story needs this tension
+
+3. EMOTIONAL CORE
+   - Every story must make the reader FEEL something
+   - Use sensory details: what does it smell like, sound like, feel like?
+   - Show emotions through actions and reactions, not just statements
+
+4. MEANINGFUL RESOLUTION
+   - The ending must feel EARNED, not random
+   - For moral stories: the moral must come from what HAPPENED, not be stated separately
+   - The last sentence should leave the reader with a warm, complete feeling
+
+LANGUAGE RULES for ${languageDisplay}:
+- Write ENTIRELY in ${scriptNote}
+- Use natural, everyday ${languageDisplay} — the language a grandmother would use with a grandchild
+- NO English words, NO Sanskrit loanwords unless they are genuinely common in spoken ${languageDisplay}
+- Vary sentence length: mix short, punchy sentences with longer flowing ones
+- Use dialogue when appropriate — it brings characters to life
+- Use at least ONE sensory detail (taste, smell, sound, texture, sight beyond just color)`;
+
+    // ── USER PROMPT ────────────────────────────────────────────────────────────
+    const contentSpecific = contentType === "moral_story"
+      ? `STORY TYPE: Children's Moral Story
+- The moral must be DEMONSTRATED through the events of the story, not stated as a separate lesson at the end
+- The character must EXPERIENCE something that teaches them — they don't just hear advice
+- The moral should feel like a natural discovery, something the reader figures out alongside the character
+- A moral story that just says "நீதி: கஷ்டப்பட வேண்டும்" at the end without the story earning it is a FAILURE`
+
+      : contentType === "fable"
+      ? `STORY TYPE: Fable with Talking Animals
+- Each animal must have a DISTINCT PERSONALITY that drives the plot (not just "clever fox, lazy bear")
+- Include at least ONE line of natural dialogue in ${languageDisplay}
+- The animals' personalities must directly cause the conflict and resolution
+- The moral must emerge from what the animals DO, not what they say about themselves`
+
+      : `STORY TYPE: Educational Reading Passage
+- The passage must tell a STORY or describe a PROCESS with a clear beginning and end
+- Include one specific, surprising, or delightful fact about "${topic}" that children won't already know
+- Use a vivid comparison or metaphor that makes the topic concrete and imaginable for a child`;
+
+    const userPrompt = `Write a children's ${contentType === "reading" ? "reading passage" : contentType === "moral_story" ? "moral story" : "fable"} about the topic: "${topic}"
+
+${contentSpecific}
+
+SENTENCE COUNT: Write exactly ${numSentences} sentences. Not more, not less.
+
+BEFORE YOU WRITE, answer these questions in your head (do NOT include these in the output):
+1. What does my main character WANT? (related to "${topic}")
+2. What OBSTACLE stands in their way?
+3. What EMOTIONAL MOMENT will the reader feel?
+4. How does it END in a way that feels complete and meaningful?
+
+QUALITY CHECK — your story FAILS if:
+✗ Any sentence could be removed without affecting the story
+✗ The story reads like a description or list of events
+✗ There is no emotional moment or turning point
+✗ The topic "${topic}" disappears from any sentence
+✗ The moral (if applicable) is not earned by what happened in the story
+✗ You use English words or unnecessary Sanskrit loanwords in ${languageDisplay}
+
+Your story SUCCEEDS if:
+✓ A child reading it would feel something (surprise, warmth, sadness, joy)
+✓ Every sentence pulls the reader to the next one
+✓ The topic "${topic}" is the heartbeat of every sentence
+✓ The ending feels satisfying and complete
+✓ The language sounds natural and beautiful in ${languageDisplay}
+
+Return ONLY this exact JSON, no markdown, no extra text:
 {
-  "title": "creative, specific title about ${topic}",
-  "content": "the complete coherent story",
-  "keywords": ["5 key words actually used in the story"],
-  ${contentType !== "reading" ? '"moral": "one clear sentence that emerges from the story",' : ""}
-  "image_prompt": "A ${imageStyle} showing [specific named character] [doing specific action from the story climax], [vivid setting details], no text, no words"
-}`
-      : `Write a ${contentTypeLabel} about "${topic}" for children aged 6-12, written entirely in ${languageDisplay}.
-
-NARRATIVE RULES (follow strictly):
-${lengthInstruction}
-- The ENTIRE story must be about "${topic}" from first sentence to last
-- Every sentence must logically and naturally follow from the previous one
-- Give the main character a name that sounds natural in ${languageDisplay}
-- Use ONLY simple everyday ${languageDisplay} words — NO English words, NO Sanskrit loanwords
-- Write in ${scriptNote}
-- NO random details — every sentence must serve the "${topic}" story
-${contentType === "moral_story" ? `- The moral must emerge NATURALLY from the events of the story
-- End with a moment that makes the moral obvious without stating it mechanically` : ""}
-${contentType === "fable" ? `- Give each animal a distinct personality that stays consistent
-- Include natural-sounding dialogue in ${languageDisplay}
-- The moral must come organically from what happens` : ""}
-
-Return ONLY valid JSON, no markdown, no extra text:
-{
-  "title": "creative title in ${languageDisplay} about ${topic}",
-  "content": "the complete coherent story in ${languageDisplay}",
-  "keywords": ["5 words actually used in the story in ${languageDisplay}"],
-  ${contentType !== "reading" ? `"moral": "one clear sentence in ${languageDisplay} that emerges from the story",` : ""}
-  "image_prompt": "A ${imageStyle} showing [specific character] [doing specific action from story], [vivid setting], no text, no words"
+  "title": "a specific, evocative title in ${languageDisplay} that hints at the emotional heart of the story",
+  "content": "the complete ${numSentences}-sentence story written entirely in ${languageDisplay} using ${scriptNote}",
+  "keywords": ["word1", "word2", "word3", "word4", "word5"],
+  ${contentType !== "reading" ? `"moral": "one sentence in ${languageDisplay} that captures what the story shows — written as a natural insight, not a command",` : ""}
+  "image_prompt": "A ${imageStyle} depicting the single most emotional moment of this story: [describe the exact scene with character name, their expression, what they are doing, the specific setting with colours and atmosphere], children's book art style, no text, no words, no letters"
 }`;
 
     const raw = await callGroq([
