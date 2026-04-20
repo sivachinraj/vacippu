@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          inputs: imagePrompt + ", children's book illustration, vibrant colors, cute cartoon style, no text",
+          inputs: imagePrompt + ", children's book illustration, vibrant colors, cute cartoon style, NO TEXT, NO LETTERS, NO WORDS, NO WRITING, NO CAPTIONS, purely visual",
         }),
       }
     );

@@ -50,6 +50,8 @@ export default function Index() {
       }
 
       const data = await storyRes.json();
+      // Small delay so image has time to start loading
+      await new Promise(r => setTimeout(r, 2000));
       setGeneratedReading(data);
       setGenerationMeta({ topic, language, length, contentType });
       setIsGenerating(false);
