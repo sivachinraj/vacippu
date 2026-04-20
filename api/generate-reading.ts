@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY!;
 const GROQ_API_KEY = process.env.GROQ_API_KEY!;
 
 const languageNames: Record<string, string> = {
@@ -16,31 +17,67 @@ const imageStyleByType: Record<string, string> = {
 
 const sentenceCounts: Record<string, Record<string, number>> = {
   reading:     { veryshort: 2, short: 4, medium: 6, long: 10 },
-  moral_story: { veryshort: 3, short: 5, medium: 7, long: 12 },
-  fable:       { veryshort: 3, short: 5, medium: 7, long: 12 },
+  moral_story: { veryshort: 3, short: 5, medium: 8, long: 14 },
+  fable:       { veryshort: 3, short: 5, medium: 8, long: 14 },
 };
 
-async function callGroq(messages: {role: string, content: string}[], max_tokens = 4096): Promise<string> {
+function parseJSON(raw: string): Record<string, unknown> {
+  const clean = raw.replace(/```json\n?|\n?```/g, "").trim();
+  const match = clean.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error("No JSON found");
+  return JSON.parse(match[0]);
+}
+
+async function callGemini(systemPrompt: string, userPrompt: string): Promise<string> {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        system_instruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+        generationConfig: { temperature: 0.9, maxOutputTokens: 2048 },
+      }),
+    }
+  );
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`GEMINI_QUOTA:${err}`);
+  }
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+}
+
+async function callGroq(systemPrompt: string, userPrompt: string): Promise<string> {
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_API_KEY}` },
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
-      messages,
+      messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userPrompt }],
       temperature: 0.75,
-      max_tokens,
+      max_tokens: 2048,
     }),
   });
-  if (!response.ok) throw new Error(`Groq error ${response.status}: ${await response.text()}`);
+  if (!response.ok) throw new Error(`Groq error: ${await response.text()}`);
   const data = await response.json();
   return data.choices?.[0]?.message?.content ?? "";
 }
 
-function parseJSON(raw: string): Record<string, unknown> {
-  const clean = raw.replace(/```json\n?|\n?```/g, "").trim();
-  const match = clean.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("No JSON object found");
-  return JSON.parse(match[0]);
+async function callLLM(sys: string, usr: string): Promise<{ text: string; provider: string }> {
+  try {
+    const text = await callGemini(sys, usr);
+    return { text, provider: "gemini" };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("GEMINI_QUOTA") || msg.includes("429") || msg.includes("quota")) {
+      console.warn("Gemini quota — falling back to Groq");
+      const text = await callGroq(sys, usr);
+      return { text, provider: "groq" };
+    }
+    throw err;
+  }
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -56,135 +93,85 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const imageStyle = imageStyleByType[contentType] ?? imageStyleByType.reading;
     const numSentences = sentenceCounts[contentType]?.[length] ?? 6;
 
-    const scriptNote = language === "tamil" ? "Tamil script (தமிழ்)"
-      : language === "hindi" || language === "marathi" ? "Devanagari script"
-      : language === "telugu" ? "Telugu script"
-      : language === "kannada" ? "Kannada script"
-      : language === "malayalam" ? "Malayalam script"
-      : language === "bengali" ? "Bengali script"
-      : language === "gujarati" ? "Gujarati script"
-      : language === "punjabi" ? "Gurmukhi script"
-      : "correct native script";
+    const grammarRules: Record<string, string> = {
+      tamil: `TAMIL GRAMMAR RULES — mandatory:
+- Write entirely in Tamil script (தமிழ்). Zero English words.
+- Use compound sentences joined by: ஆனால், எனினும், அதனால், எனவே, திடீரென்று, அப்போது, மகிழ்ச்சியுடன்
+- Verb-subject agreement: அவன் சென்றான் / அவள் சென்றாள் / அது சென்றது
+- Verbal participles for flow: சென்று பார்த்தான், ஓடி வந்தாள், மலர்ந்து சிரித்தாள்
+- Include at least ONE line of natural dialogue
+- Use sensory details: smell (மணம்), sound (சத்தம்), touch (தொட்டாள்)
+- NEVER start two consecutive sentences with the same word
+- Mix short punchy sentences with long flowing ones`,
+      hindi: `HINDI RULES: Write in Devanagari. Use compound sentences with जब...तब, हालांकि, इसलिए, तभी. Include dialogue. Vary sentence length.`,
+      default: `Write entirely in correct native script. Use compound sentences with natural connectors. Include dialogue. Vary sentence length.`,
+    };
 
-    // ── SYSTEM PROMPT ──────────────────────────────────────────────────────────
-    const systemPrompt = `You are one of the world's finest children's authors, with deep knowledge of ${languageDisplay} literature, culture, and storytelling traditions.
+    const systemPrompt = `You are one of the world's finest children's authors, writing natively in ${languageDisplay} with a poet's soul.
 
-YOUR WRITING PHILOSOPHY:
-Every story you write has SOUL. You understand that a great children's story is not a list of observations or random events — it is a journey of the heart. A child must FEEL something when they read your story: curiosity, warmth, surprise, or a quiet understanding of life.
+${grammarRules[language] ?? grammarRules.default}
 
-THE DIFFERENCE BETWEEN BAD AND GOOD WRITING:
+DEAD writing (FORBIDDEN):
+"கண்ணன் மரத்தைப் பார்த்தான். இலைகள் பச்சையாக இருந்தன. பறவை பாடியது. அவன் சென்றான்."
+— Camera shots. No emotion. No connection. NEVER write like this.
 
-BAD (what you must NEVER do):
-"Kannan saw a banana tree. Its leaves were green. Bananas were hanging. A monkey ate a banana."
-This is dead writing. It describes objects like a camera. There is no character, no feeling, no reason to care. It is a list of facts, not a story.
+LIVING writing (REQUIRED):
+"மரத்தின் நிழலில் நின்ற கண்ணனுக்கு, திடீரென்று ஒரு பறவையின் குரல் காதில் விழுந்தது — அது அவன் அம்மாவின் தாலாட்டைப் போல் இனிமையாக இருந்தது; அந்த நொடியில், அவன் மனதில் இருந்த கவலை மெல்ல மெல்ல கரைந்து போனது."
+— One flowing thought. Emotion. Metaphor. Transformation.
 
-GOOD (what you must ALWAYS do):
-"Kannan had been saving his only coin for three whole days, dreaming of buying a banana from the market. But when he finally reached the tree, he found a hungry little monkey staring at the last fruit with desperate eyes — and in that moment, Kannan understood what truly mattered."
-This has: a CHARACTER with a DESIRE, an OBSTACLE, an EMOTIONAL MOMENT, and a RESOLUTION that means something.
+EVERY STORY NEEDS:
+1. A CHARACTER with a specific desire connected to the topic
+2. A TURNING POINT — something changes
+3. SENSORY DETAILS beyond just sight
+4. EMOTIONAL ARC — character feels differently at the end
+5. At least one metaphor that surprises and delights
 
-THE FOUR PILLARS OF EVERY STORY YOU WRITE:
+Return ONLY valid JSON. No markdown. No preamble.`;
 
-1. CHARACTER WITH DESIRE
-   - Your main character must WANT something specific
-   - The reader must understand WHY they want it
-   - The desire must connect directly to the topic
-
-2. OBSTACLE OR TENSION
-   - Something must stand between the character and what they want
-   - This creates forward momentum — the reader wants to know what happens
-   - Even a very short story needs this tension
-
-3. EMOTIONAL CORE
-   - Every story must make the reader FEEL something
-   - Use sensory details: what does it smell like, sound like, feel like?
-   - Show emotions through actions and reactions, not just statements
-
-4. MEANINGFUL RESOLUTION
-   - The ending must feel EARNED, not random
-   - For moral stories: the moral must come from what HAPPENED, not be stated separately
-   - The last sentence should leave the reader with a warm, complete feeling
-
-LANGUAGE RULES for ${languageDisplay}:
-- Write ENTIRELY in ${scriptNote}
-- Use natural, everyday ${languageDisplay} — the language a grandmother would use with a grandchild
-- NO English words, NO Sanskrit loanwords unless they are genuinely common in spoken ${languageDisplay}
-- Vary sentence length: mix short, punchy sentences with longer flowing ones
-- Use dialogue when appropriate — it brings characters to life
-- Use at least ONE sensory detail (taste, smell, sound, texture, sight beyond just color)`;
-
-    // ── USER PROMPT ────────────────────────────────────────────────────────────
     const contentSpecific = contentType === "moral_story"
-      ? `STORY TYPE: Children's Moral Story
-- The moral must be DEMONSTRATED through the events of the story, not stated as a separate lesson at the end
-- The character must EXPERIENCE something that teaches them — they don't just hear advice
-- The moral should feel like a natural discovery, something the reader figures out alongside the character
-- A moral story that just says "நீதி: கஷ்டப்பட வேண்டும்" at the end without the story earning it is a FAILURE`
-
+      ? `MORAL STORY: The moral must be LIVED, not stated. End with a moment that makes the reader FEEL the moral. NEVER write "நீதி:" separately.`
       : contentType === "fable"
-      ? `STORY TYPE: Fable with Talking Animals
-- Each animal must have a DISTINCT PERSONALITY that drives the plot (not just "clever fox, lazy bear")
-- Include at least ONE line of natural dialogue in ${languageDisplay}
-- The animals' personalities must directly cause the conflict and resolution
-- The moral must emerge from what the animals DO, not what they say about themselves`
+      ? `FABLE: Each animal's personality drives every decision. Include natural dialogue. Moral emerges from who the animals ARE.`
+      : `READING PASSAGE: Still tell a story. Include one surprising fact about "${topic}". Use a metaphor that makes it beautiful for a child.`;
 
-      : `STORY TYPE: Educational Reading Passage
-- The passage must tell a STORY or describe a PROCESS with a clear beginning and end
-- Include one specific, surprising, or delightful fact about "${topic}" that children won't already know
-- Use a vivid comparison or metaphor that makes the topic concrete and imaginable for a child`;
-
-    const userPrompt = `Write a children's ${contentType === "reading" ? "reading passage" : contentType === "moral_story" ? "moral story" : "fable"} about the topic: "${topic}"
+    const userPrompt = `Write a children's story about: "${topic}"
 
 ${contentSpecific}
 
-SENTENCE COUNT: Write exactly ${numSentences} sentences. Not more, not less.
+EXACTLY ${numSentences} sentences. Each flows into the next like water.
 
-BEFORE YOU WRITE, answer these questions in your head (do NOT include these in the output):
-1. What does my main character WANT? (related to "${topic}")
-2. What OBSTACLE stands in their way?
-3. What EMOTIONAL MOMENT will the reader feel?
-4. How does it END in a way that feels complete and meaningful?
+Decide silently before writing:
+→ What does the character desperately want?
+→ What stops or surprises them?
+→ What is the most beautiful image in this story?
+→ How does it end with warmth and completeness?
 
-QUALITY CHECK — your story FAILS if:
-✗ Any sentence could be removed without affecting the story
-✗ The story reads like a description or list of events
-✗ There is no emotional moment or turning point
-✗ The topic "${topic}" disappears from any sentence
-✗ The moral (if applicable) is not earned by what happened in the story
-✗ You use English words or unnecessary Sanskrit loanwords in ${languageDisplay}
+FAILS IF: any sentence is removable, no emotional moment, topic disappears, mechanical moral, English words used.
+SUCCEEDS IF: child feels something real, every sentence pulls forward, language is naturally beautiful.
 
-Your story SUCCEEDS if:
-✓ A child reading it would feel something (surprise, warmth, sadness, joy)
-✓ Every sentence pulls the reader to the next one
-✓ The topic "${topic}" is the heartbeat of every sentence
-✓ The ending feels satisfying and complete
-✓ The language sounds natural and beautiful in ${languageDisplay}
-
-Return ONLY this exact JSON, no markdown, no extra text:
+Return ONLY this JSON:
 {
-  "title": "a specific, evocative title in ${languageDisplay} that hints at the emotional heart of the story",
-  "content": "the complete ${numSentences}-sentence story written entirely in ${languageDisplay} using ${scriptNote}",
+  "title": "poetic specific title in ${languageDisplay}",
+  "content": "complete ${numSentences}-sentence story in ${languageDisplay}, flowing like prose-poetry",
   "keywords": ["word1", "word2", "word3", "word4", "word5"],
-  ${contentType !== "reading" ? `"moral": "one sentence in ${languageDisplay} that captures what the story shows — written as a natural insight, not a command",` : ""}
-  "image_prompt": "A ${imageStyle} depicting the single most emotional moment of this story: [describe the exact scene with character name, their expression, what they are doing, the specific setting with colours and atmosphere], children's book art style, no text, no words, no letters"
+  ${contentType !== "reading" ? `"moral": "one beautiful sentence in ${languageDisplay} — natural truth discovered, not a command",` : ""}
+  "image_prompt": "A ${imageStyle} capturing the most emotional moment: [character], [expression], [action], [setting with colors and light], no text, no words, no letters"
 }`;
 
-    const raw = await callGroq([
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ]);
+    const { text: raw, provider } = await callLLM(systemPrompt, userPrompt);
+    console.log(`Provider: ${provider}`);
 
     let parsedContent: Record<string, unknown>;
     try {
       parsedContent = parseJSON(raw);
     } catch {
-      console.error("Failed to parse response:", raw);
-      throw new Error("Failed to generate story");
+      console.error("Parse failed:", raw);
+      throw new Error("Failed to parse story");
     }
 
-    const imagePrompt = (parsedContent.image_prompt as string)
-      ?? `A ${imageStyle} about ${topic}, cute cartoon style, vibrant colors, no text`;
+    const imagePrompt = (parsedContent.image_prompt as string) ?? `A ${imageStyle} about ${topic}, vibrant colors, no text`;
+    return res.status(200).json({ ...parsedContent, image_prompt: imagePrompt, _provider: provider });
 
-    return res.status(200).json({ ...parsedContent, image_prompt: imagePrompt });
   } catch (error) {
     console.error("Error:", error);
     return res.status(500).json({ error: error instanceof Error ? error.message : "Unknown error" });
