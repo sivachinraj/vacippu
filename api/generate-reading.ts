@@ -56,10 +56,15 @@ async function callLLM(sys: string, usr: string): Promise<{ text: string; provid
   try {
     const text = await callGemini(sys, usr);
     return { text, provider: "gemini" };
-  } catch (e: any) {
-    console.warn("Gemini failed, using Groq:", e.message?.substring(0, 100));
-    const text = await callGroq(sys, usr);
-    return { text, provider: "groq" };
+  } catch (geminiError: any) {
+    console.warn("Gemini failed, falling back to Groq:", geminiError.message?.substring(0, 150));
+    try {
+      const text = await callGroq(sys, usr);
+      return { text, provider: "groq" };
+    } catch (groqError: any) {
+      console.error("Both providers failed. Groq:", groqError.message?.substring(0, 100));
+      throw new Error("All AI providers failed: " + groqError.message);
+    }
   }
 }
 
