@@ -15,10 +15,11 @@ const imageStyleByType: Record<string, string> = {
   fable: "classic fable illustration, anthropomorphic animals in lush natural setting, expressive faces",
 };
 
+// STRICT sentence counts - these are enforced in the prompt
 const sentenceCounts: Record<string, Record<string, number>> = {
-  reading:     { veryshort: 2, short: 4, medium: 6, long: 10 },
-  moral_story: { veryshort: 3, short: 5, medium: 8, long: 14 },
-  fable:       { veryshort: 3, short: 5, medium: 8, long: 14 },
+  reading:     { veryshort: 2, short: 3, medium: 5, long: 8 },
+  moral_story: { veryshort: 2, short: 4, medium: 6, long: 10 },
+  fable:       { veryshort: 2, short: 4, medium: 6, long: 10 },
 };
 
 function parseJSON(raw: string): Record<string, unknown> {
@@ -37,19 +38,25 @@ async function callGemini(systemPrompt: string, userPrompt: string): Promise<str
       body: JSON.stringify({
         system_instruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-        generationConfig: { temperature: 1.0, maxOutputTokens: 2048 },
+        generationConfig: { temperature: 0.9, maxOutputTokens: 1024 },
       }),
     }
   );
   if (!response.ok) {
     const err = await response.text();
+    console.error("Gemini error:", err);
     throw new Error(`GEMINI_QUOTA:${err}`);
   }
   const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  if (!text) {
+    console.error("Gemini returned empty:", JSON.stringify(data));
+    throw new Error("GEMINI_QUOTA:empty response");
+  }
+  return text;
 }
 
-async function callGroqFallback(systemPrompt: string, userPrompt: string): Promise<string> {
+async function callGroq(systemPrompt: string, userPrompt: string): Promise<string> {
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_API_KEY}` },
@@ -60,7 +67,7 @@ async function callGroqFallback(systemPrompt: string, userPrompt: string): Promi
         { role: "user", content: userPrompt },
       ],
       temperature: 0.75,
-      max_tokens: 2048,
+      max_tokens: 1024,
     }),
   });
   if (!response.ok) throw new Error(`Groq error: ${await response.text()}`);
@@ -75,8 +82,8 @@ async function callLLM(sys: string, usr: string): Promise<{ text: string; provid
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("GEMINI_QUOTA") || msg.includes("429") || msg.includes("quota")) {
-      console.warn("Gemini quota hit — falling back to Groq");
-      const text = await callGroqFallback(sys, usr);
+      console.warn("Gemini quota/empty — falling back to Groq");
+      const text = await callGroq(sys, usr);
       return { text, provider: "groq" };
     }
     throw err;
@@ -94,101 +101,73 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { topic, language = "tamil", length = "medium", contentType = "reading" } = req.body;
     const languageDisplay = languageNames[language] || language;
     const imageStyle = imageStyleByType[contentType] ?? imageStyleByType.reading;
-    const numSentences = sentenceCounts[contentType]?.[length] ?? 6;
+    const n = sentenceCounts[contentType]?.[length] ?? 5;
 
-    // ── SYSTEM PROMPT ─────────────────────────────────────────────────────────
-    const systemPrompt = language === "tamil" ? `நீ உலகின் சிறந்த குழந்தைகள் எழுத்தாளர். தமிழில் மட்டுமே எழுதுகிறாய் — ஒரு கவிஞரின் உள்ளத்துடன், கதைசொல்லியின் ஆற்றலுடன்.
+    // Length label shown to user in UI
+    const lengthLabel: Record<string, string> = {
+      veryshort: "Very Short",
+      short: "Short",
+      medium: "Medium",
+      long: "Long",
+    };
 
-தமிழ் உரைநடை விதிகள் — கட்டாயம்:
-- ஆனால், எனினும், அதனால், எனவே, திடீரென்று, அப்போது, அந்த நேரத்தில் — இந்த இணைப்பு சொற்களை தொடர்ந்து பயன்படுத்து
-- வினையெச்சங்கள்: சென்று பார்த்தான், ஓடி வந்தாள், எடுத்து கொடுத்தாள், நின்று யோசித்தான்
-- வினை-பொருள் ஒத்திசைவு: அவன் சென்றான் / அவள் சென்றாள் / அது சென்றது
-- உரையாடல்: "என்ன நடக்கிறது?" என்று கேட்டாள் — இப்படி இயல்பாக சேர்
-- புலன் உணர்வுகள்: மணம், சத்தம், தொடுகை, சுவை — வெறும் பார்வை போதாது
-- குறுகிய, வலிமையான வாக்கியங்களை நீண்ட, ஓடும் வாக்கியங்களுடன் மாற்றி மாற்றி எழுது
-- இரண்டு தொடர்ச்சியான வாக்கியங்கள் ஒரே சொல்லில் தொடங்கக்கூடாது
-- ஆங்கில சொற்கள் வேண்டாம்; வழக்கு தமிழ் மட்டுமே
+    const systemPrompt = language === "tamil"
+      ? `நீ குழந்தைகள் எழுத்தாளர். தமிழில் மட்டும் எழுது. உரைநடை விதிகள்:
+- ஆனால், எனினும், அதனால், திடீரென்று, அப்போது என்ற இணைப்பு சொற்களை பயன்படுத்து
+- வினையெச்சங்கள்: சென்று பார்த்தான், ஓடி வந்தாள்
+- அவன் சென்றான் / அவள் சென்றாள் என்று சரியாக எழுது
+- ஆங்கில சொற்கள் வேண்டாம்
+- Valid JSON மட்டும். Markdown வேண்டாம்.`
+      : `You are a children's author. Write naturally in ${languageDisplay}. Valid JSON only. No markdown.`;
 
-இறந்த எழுத்து (NEVER):
-"கண்ணன் மரத்தைப் பார்த்தான். இலைகள் பச்சையாக இருந்தன. காற்று வீசியது. அவன் சோகமடைந்தான்."
-→ புகைப்படம். உணர்வு இல்லை. தொடர்பு இல்லை.
-
-உயிருள்ள எழுத்து (ALWAYS):
-"மரத்தின் நிழலில் நின்ற கண்ணனுக்கு, திடீரென்று ஒரு பறவையின் குரல் காதில் விழுந்தது — அது அவன் அம்மாவின் தாலாட்டைப் போல் இனிமையாக இருந்தது; அந்த நொடியில், அவன் மனதில் இருந்த கவலை மெல்ல மெல்ல கரைந்து போனது."
-→ ஒரே ஓட்டம். உணர்வு. உவமை. உள்ளமாற்றம்.
-
-Valid JSON மட்டும். Markdown வேண்டாம்.`
-    : `You are one of the world's finest children's authors writing natively in ${languageDisplay}.
-
-Use flowing compound sentences with connectors. Include dialogue. Use sensory details beyond sight.
-Vary sentence length. Create emotional arcs. Use metaphors.
-
-DEAD (forbidden): Simple disconnected sentences with no emotion.
-LIVING (required): Flowing prose with connectors, sensory detail, emotion, metaphor.
-
-Valid JSON only. No markdown.`;
-
-    // ── CONTENT TYPE RULES ────────────────────────────────────────────────────
-    const contentSpecific = contentType === "moral_story"
-      ? (language === "tamil"
-        ? `நீதிக் கதை: நீதி கதை நிகழ்வுகளில் இருந்து இயல்பாக வர வேண்டும். "நீதி:" என்று தனியாக எழுதாதே. இறுதி தருணம் நீதியை உணர வைக்க வேண்டும்.`
-        : `Moral Story: The moral must emerge from events naturally. NEVER state "Moral:" separately. The final moment must make the reader feel the moral.`)
+    const contentRule = contentType === "moral_story"
+      ? (language === "tamil" ? `நீதிக் கதை: நீதி கதையில் இருந்து இயல்பாக வர வேண்டும். "நீதி:" என்று தனியாக எழுதாதே.`
+        : `Moral story: moral must emerge naturally from events. Never state it separately.`)
       : contentType === "fable"
-      ? (language === "tamil"
-        ? `நீதிக்கதை: ஒவ்வொரு விலங்கின் குணம் அதன் ஒவ்வொரு முடிவையும் நிர்ணயிக்கட்டும். இயல்பான உரையாடல் சேர். நீதி விலங்குகளின் குணத்திலிருந்து வரட்டும்.`
-        : `Fable: Each animal's personality drives every decision. Include natural dialogue. Moral comes from who they ARE.`)
-      : (language === "tamil"
-        ? `வாசிப்பு பகுதி: கதையாக அல்லது செயல்முறையாக சொல். "${topic}" பற்றி ஒரு ஆச்சரியமான உண்மை சேர். உவமை மூலம் கருத்தை அழகாக சொல்.`
-        : `Reading Passage: Tell as a story or process. Include one surprising fact about "${topic}". Use a metaphor to make it beautiful.`);
+      ? (language === "tamil" ? `நீதிக்கதை: விலங்குகள் பேசும் கதை. இயல்பான உரையாடல் சேர்.`
+        : `Fable with talking animals. Include natural dialogue.`)
+      : (language === "tamil" ? `வாசிப்பு பகுதி: கதையாக சொல். ஒரு ஆச்சரியமான உண்மை சேர்.`
+        : `Reading passage: tell as a story. Include one surprising fact.`);
 
-    // ── USER PROMPT ───────────────────────────────────────────────────────────
     const userPrompt = language === "tamil"
-      ? `"${topic}" பற்றி ${numSentences} வாக்கியங்களில் குழந்தைகளுக்கான ${contentType === "reading" ? "வாசிப்பு பகுதி" : contentType === "moral_story" ? "நீதிக் கதை" : "நீதிக்கதை"} எழுது.
+      ? `"${topic}" பற்றி குழந்தைகளுக்கான ${contentType === "moral_story" ? "நீதிக் கதை" : contentType === "fable" ? "நீதிக்கதை" : "வாசிப்பு பகுதி"} எழுது.
 
-${contentSpecific}
+${contentRule}
 
-எழுதுவதற்கு முன் மனதில் முடிவு செய் (வெளியில் எழுதாதே):
-→ என் பாத்திரம் என்ன விரும்புகிறான்/ள்? ("${topic}" உடன் தொடர்புடையதாக)
-→ என்ன அவர்களை நிறுத்துகிறது அல்லது ஆச்சரியப்படுத்துகிறது?
-→ மிகவும் அழகான காட்சி எது?
-→ இறுதி வரியில் பாத்திரம் எப்படி உணர்கிறான்/ள்?
+⚠️ மிக முக்கியம்: சரியாக ${n} வாக்கியங்கள் மட்டும். ${n}-ஐ விட அதிகமாகவோ குறைவாகவோ எழுதாதே.
 
-இந்த JSON மட்டும் திரும்ப கொடு:
+JSON மட்டும்:
 {
-  "title": "தமிழில் கவிதை தலைப்பு — கதையின் உணர்வை குறிப்பிடுவதாக",
-  "content": "தமிழில் முழு ${numSentences} வாக்கிய கதை",
+  "title": "தமிழில் தலைப்பு",
+  "content": "சரியாக ${n} வாக்கியங்கள் மட்டும் கொண்ட கதை",
   "keywords": ["சொல்1", "சொல்2", "சொல்3", "சொல்4", "சொல்5"],
-  ${contentType !== "reading" ? '"moral": "தமிழில் ஒரு அழகான வாக்கியம் — இயல்பான உண்மை",' : ""}
-  "image_prompt": "A ${imageStyle} of [exact character name] [precise emotional action from story climax] in [specific setting with colors], no text, no words, no letters"
+  ${contentType !== "reading" ? '"moral": "தமிழில் ஒரு வாக்கியம்",' : ""}
+  "image_prompt": "A ${imageStyle} of [character] doing [action] in [setting], no text, no words"
 }`
-      : `Write a ${numSentences}-sentence children's ${contentType === "reading" ? "reading passage" : contentType === "moral_story" ? "moral story" : "fable"} about: "${topic}"
+      : `Write a ${contentType === "reading" ? "reading passage" : contentType === "moral_story" ? "moral story" : "fable"} about "${topic}" for children aged 6-12.
 
-${contentSpecific}
+${contentRule}
 
-Decide silently before writing:
-→ What does the character want? (connected to "${topic}")
-→ What stops or surprises them?
-→ What is the most beautiful image?
-→ How does it end warmly?
+⚠️ CRITICAL LENGTH RULE: Write EXACTLY ${n} sentences. Not ${n+1}. Not ${n-1}. Exactly ${n}.
+Count every sentence before submitting. If you have more than ${n}, delete sentences until you have exactly ${n}.
 
 Return ONLY this JSON:
 {
-  "title": "poetic specific title in ${languageDisplay}",
-  "content": "complete ${numSentences}-sentence story in ${languageDisplay}",
+  "title": "specific title about ${topic}",
+  "content": "exactly ${n} sentences — count them",
   "keywords": ["word1", "word2", "word3", "word4", "word5"],
-  ${contentType !== "reading" ? `"moral": "one beautiful sentence in ${languageDisplay} — natural truth, not a command",` : ""}
-  "image_prompt": "A ${imageStyle} of [exact character] [precise emotional action] in [specific setting with colors], no text, no words, no letters"
+  ${contentType !== "reading" ? `"moral": "one sentence that emerges from the story",` : ""}
+  "image_prompt": "A ${imageStyle} of [specific character] doing [specific action from story] in [setting], no text, no words, no letters"
 }`;
 
-    // ── CALL & RETURN ─────────────────────────────────────────────────────────
     const { text: raw, provider } = await callLLM(systemPrompt, userPrompt);
-    console.log(`Provider: ${provider}`);
+    console.log(`Provider: ${provider}, length: ${length} (${n} sentences), lang: ${language}`);
 
     let parsedContent: Record<string, unknown>;
     try {
       parsedContent = parseJSON(raw);
     } catch {
-      console.error("Parse failed:", raw.substring(0, 300));
+      console.error("Parse failed. Raw:", raw.substring(0, 500));
       throw new Error("Failed to parse story response");
     }
 
